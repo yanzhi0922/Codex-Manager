@@ -99,6 +99,14 @@
 └─ README.md
 ```
 
+## 鸣谢与参考项目
+
+- CPA（CLIProxyAPI）：本项目在协议适配、请求转发与兼容行为上参考了该项目的实现思路 <https://github.com/router-for-me/CLIProxyAPI>
+- 对应实现可见：
+- `crates/service/src/gateway/protocol_adapter/request_mapping.rs`
+- `crates/service/src/gateway/upstream/transport.rs`
+
+
 ## 联系方式
 
 <p align="center">
