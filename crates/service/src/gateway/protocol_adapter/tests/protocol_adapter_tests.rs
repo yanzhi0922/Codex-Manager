@@ -4,7 +4,6 @@ use super::{
     convert_openai_chat_stream_chunk_with_tool_name_restore_map,
     convert_openai_completions_stream_chunk, ResponseAdapter, ToolNameRestoreMap,
 };
-use crate::apikey_profile::{PROTOCOL_ANTHROPIC_NATIVE, PROTOCOL_OPENAI_COMPAT};
 
 #[path = "protocol_adapter_tests/anthropic_request.rs"]
 mod anthropic_request;

@@ -1,4 +1,6 @@
-use super::*;
+#[allow(unused_imports)]
+use super::{adapt_request_for_protocol, ResponseAdapter};
+use crate::apikey_profile::PROTOCOL_ANTHROPIC_NATIVE;
 
 #[test]
 fn anthropic_messages_are_the_only_path_adapted_to_responses() {

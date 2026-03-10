@@ -1,4 +1,6 @@
-use super::*;
+#[allow(unused_imports)]
+use super::{adapt_request_for_protocol, adapt_upstream_response, ResponseAdapter};
+use crate::apikey_profile::PROTOCOL_ANTHROPIC_NATIVE;
 
 #[test]
 fn anthropic_json_response_maps_reasoning_item_to_thinking_block() {

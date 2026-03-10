@@ -1,4 +1,8 @@
-use super::*;
+#[allow(unused_imports)]
+use super::{
+    adapt_upstream_response, convert_openai_chat_stream_chunk,
+    convert_openai_completions_stream_chunk, ResponseAdapter,
+};
 
 #[test]
 fn openai_chat_response_is_converted_from_responses_json() {

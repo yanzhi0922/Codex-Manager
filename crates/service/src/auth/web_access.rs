@@ -2,7 +2,6 @@ use crate::app_settings::{
     get_persisted_app_setting, normalize_optional_text, save_persisted_app_setting,
     APP_SETTING_WEB_ACCESS_PASSWORD_HASH_KEY,
 };
-use crate::rpc_auth::constant_time_eq;
 use rand::RngCore;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -68,7 +67,7 @@ fn verify_password_hash(password: &str, stored_hash: &str) -> bool {
     if kind != "sha256" || parts.next().is_some() {
         return false;
     }
-    constant_time_eq(
+    super::rpc::constant_time_eq(
         hex_sha256(format!("{salt_hex}:{password}").as_bytes()).as_bytes(),
         expected_hash.as_bytes(),
     )

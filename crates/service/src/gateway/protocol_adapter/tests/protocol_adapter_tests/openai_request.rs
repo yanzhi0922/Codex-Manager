@@ -1,4 +1,10 @@
-use super::*;
+#[allow(unused_imports)]
+use super::{
+    adapt_request_for_protocol, adapt_upstream_response_with_tool_name_restore_map,
+    convert_openai_chat_stream_chunk_with_tool_name_restore_map, ResponseAdapter,
+    ToolNameRestoreMap,
+};
+use crate::apikey_profile::PROTOCOL_OPENAI_COMPAT;
 
 #[test]
 fn openai_chat_completions_are_adapted_to_responses() {

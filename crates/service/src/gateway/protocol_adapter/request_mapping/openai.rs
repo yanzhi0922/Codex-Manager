@@ -143,8 +143,8 @@ pub(super) fn shorten_openai_tool_name_with_map(
 
 fn build_openai_tool_name_restore_map(
     tool_name_map: &BTreeMap<String, String>,
-) -> super::super::ToolNameRestoreMap {
-    let mut restore_map = super::super::ToolNameRestoreMap::new();
+) -> super::ToolNameRestoreMap {
+    let mut restore_map = super::ToolNameRestoreMap::new();
     for (original, shortened) in tool_name_map {
         if original != shortened {
             restore_map.insert(shortened.clone(), original.clone());
@@ -360,7 +360,7 @@ fn map_openai_chat_tool_choice_to_responses(
 
 pub(crate) fn convert_openai_chat_completions_request(
     body: &[u8],
-) -> Result<(Vec<u8>, bool, super::super::ToolNameRestoreMap), String> {
+) -> Result<(Vec<u8>, bool, super::ToolNameRestoreMap), String> {
     let payload: Value = serde_json::from_slice(body)
         .map_err(|_| "invalid chat.completions request json".to_string())?;
     let Some(obj) = payload.as_object() else {

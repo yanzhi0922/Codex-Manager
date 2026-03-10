@@ -84,9 +84,7 @@ pub(crate) fn convert_anthropic_messages_request(body: &[u8]) -> Result<(Vec<u8>
         );
     }
 
-    if let Some(prompt_cache_key) =
-        super::super::prompt_cache::resolve_prompt_cache_key(obj, out.get("model"))
-    {
+    if let Some(prompt_cache_key) = super::resolve_prompt_cache_key(obj, out.get("model")) {
         out.insert(
             "prompt_cache_key".to_string(),
             Value::String(prompt_cache_key),

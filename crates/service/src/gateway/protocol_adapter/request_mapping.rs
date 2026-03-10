@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 mod anthropic;
 mod openai;
 
+type ToolNameRestoreMap = super::ToolNameRestoreMap;
+
 const DEFAULT_ANTHROPIC_MODEL: &str = "gpt-5.3-codex";
 const DEFAULT_ANTHROPIC_REASONING: &str = "high";
 const DEFAULT_ANTHROPIC_INSTRUCTIONS: &str =
@@ -14,6 +16,13 @@ use self::openai::shorten_openai_tool_name_with_map;
 pub(super) use self::openai::{
     convert_openai_chat_completions_request, convert_openai_completions_request,
 };
+
+fn resolve_prompt_cache_key(
+    obj: &serde_json::Map<String, Value>,
+    model: Option<&Value>,
+) -> Option<String> {
+    super::prompt_cache::resolve_prompt_cache_key(obj, model)
+}
 
 fn convert_chat_messages_to_responses_input(
     messages: &[Value],

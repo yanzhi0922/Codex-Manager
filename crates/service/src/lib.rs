@@ -4,22 +4,15 @@ mod account;
 mod apikey;
 pub(crate) mod app_settings;
 mod auth;
-mod bootstrap;
-mod error_codes;
+mod errors;
 mod gateway;
 mod http;
-mod lock_utils;
-pub mod process_env;
-mod reasoning_effort;
+mod lifecycle;
 mod requestlog;
-pub(crate) mod rpc_auth;
 mod rpc_dispatch;
-mod shutdown;
-mod startup;
-#[path = "storage/storage_helpers.rs"]
-mod storage_helpers;
+mod runtime;
+mod storage;
 mod usage;
-mod web_access;
 
 pub(crate) use usage::account_meta as usage_account_meta;
 pub(crate) use usage::http as usage_http;
@@ -54,6 +47,11 @@ pub(crate) use auth::tokens as auth_tokens;
 pub(crate) use requestlog::clear as requestlog_clear;
 pub(crate) use requestlog::list as requestlog_list;
 pub(crate) use requestlog::today_summary as requestlog_today_summary;
+pub(crate) use errors as error_codes;
+pub(crate) use runtime::lock_utils;
+pub(crate) use runtime::reasoning_effort;
+pub(crate) use storage::helpers as storage_helpers;
+pub use runtime::process_env;
 
 pub use app_settings::{
     app_settings_get, app_settings_get_with_overrides, app_settings_set,
@@ -75,11 +73,11 @@ pub use app_settings::{
     DEFAULT_BIND_ADDR, SERVICE_BIND_MODE_ALL_INTERFACES, SERVICE_BIND_MODE_LOOPBACK,
     SERVICE_BIND_MODE_SETTING_KEY, WEB_ACCESS_SESSION_COOKIE_NAME,
 };
-pub use bootstrap::{initialize_storage_if_needed, portable};
-pub use rpc_auth::{rpc_auth_token, rpc_auth_token_matches};
-pub use shutdown::{clear_shutdown_flag, request_shutdown, shutdown_requested};
-pub use startup::{start_one_shot_server, start_server, ServerHandle};
-pub use web_access::{
+pub use lifecycle::bootstrap::{initialize_storage_if_needed, portable};
+pub use lifecycle::shutdown::{clear_shutdown_flag, request_shutdown, shutdown_requested};
+pub use lifecycle::startup::{start_one_shot_server, start_server, ServerHandle};
+pub use auth::{rpc_auth_token, rpc_auth_token_matches};
+pub use auth::{
     build_web_access_session_token, current_web_access_password_hash, set_web_access_password,
     verify_web_access_password, web_access_password_configured, web_auth_status_value,
 };
