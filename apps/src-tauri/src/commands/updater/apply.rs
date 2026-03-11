@@ -9,7 +9,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::windows::process::CommandExt;
 
 use super::model::UpdateActionResponse;
-use super::runtime::{current_exe_path, CREATE_NO_WINDOW};
+use super::runtime::current_exe_path;
+#[cfg(target_os = "windows")]
+use super::runtime::CREATE_NO_WINDOW;
 use super::state::{
     clear_pending_update, pending_update_path, read_pending_update, script_dir_from_pending,
 };
