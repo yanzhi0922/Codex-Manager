@@ -9,10 +9,10 @@ function createNormalizeAddr() {
     if (!raw) {
       return "localhost:48760";
     }
-    if (raw.includes(":")) {
-      return raw;
+    if (/^\d+$/.test(raw)) {
+      return `localhost:${raw}`;
     }
-    return `localhost:${raw}`;
+    return raw;
   };
 }
 
@@ -102,6 +102,35 @@ test("persistServiceAddrInput normalizes input and writes patch through settings
   assert.deepEqual(patches, [
     {
       serviceAddr: "localhost:6060",
+    },
+  ]);
+});
+
+test("persistServiceAddrInput preserves host-only address", async () => {
+  const state = {};
+  const dom = {
+    serviceAddrInput: {
+      value: " example.com ",
+    },
+  };
+  const patches = [];
+  const controller = createController({
+    dom,
+    state,
+    appSettingsSet: async (patch = {}) => {
+      patches.push(patch);
+      return patch;
+    },
+  });
+
+  const ok = await controller.persistServiceAddrInput();
+
+  assert.equal(ok, true);
+  assert.equal(dom.serviceAddrInput.value, "example.com");
+  assert.equal(state.serviceAddr, "example.com");
+  assert.deepEqual(patches, [
+    {
+      serviceAddr: "example.com",
     },
   ]);
 });

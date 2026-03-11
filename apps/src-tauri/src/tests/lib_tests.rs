@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn normalize_addr_defaults_to_localhost() {
     assert_eq!(normalize_addr("5050").unwrap(), "localhost:5050");
     assert_eq!(normalize_addr("localhost:5050").unwrap(), "localhost:5050");
+    assert_eq!(normalize_addr("example.com").unwrap(), "example.com");
 }
 
 #[test]
