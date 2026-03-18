@@ -233,7 +233,9 @@ function AccountKeyInfoCell({
     accountLabel.trim() !== "" &&
     accountLabel !== log.accountId;
   const attemptedAccountLabels = log.attemptedAccountIds
-    .map((accountId) => resolveAccountDisplayNameById(accountId, accountNameMap))
+    .map((accountId) =>
+      resolveAccountDisplayNameById(accountId, accountNameMap),
+    )
     .filter((value) => value.trim().length > 0);
   const initialAccountLabel = resolveAccountDisplayNameById(
     log.initialAccountId,
@@ -636,9 +638,9 @@ function LogsPageContent() {
         />
       </div>
 
-      <Card className="glass-card overflow-hidden border-none shadow-xl backdrop-blur-md">
-        <CardHeader className="gap-1.5 border-b border-border/40 bg-muted/20 py-4">
-          <div className="flex flex-col gap-1 xl:flex-row xl:items-end xl:justify-between">
+      <Card className="glass-card overflow-hidden border-none gap-0 py-0 shadow-xl backdrop-blur-md">
+        <CardHeader className="flex min-h-1 items-center border-b border-border/40 bg-[var(--table-section-bg)] py-3">
+          <div className="flex w-full flex-col gap-1 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <CardTitle className="text-[15px] font-semibold">
                 请求明细 按{" "}
@@ -653,7 +655,7 @@ function LogsPageContent() {
         </CardHeader>
         <CardContent className="px-0">
           <Table className="min-w-[1320px] table-fixed">
-            <TableHeader className="bg-muted/30">
+            <TableHeader>
               <TableRow>
                 <TableHead className="h-12 w-[150px] px-4 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                   时间

@@ -392,7 +392,7 @@ export default function SettingsPage() {
         }}
         className="w-full"
       >
-        <TabsList className="mb-6 flex h-11 w-full justify-start overflow-x-auto rounded-xl bg-muted/50 p-1 no-scrollbar lg:w-fit">
+        <TabsList className="glass-card mb-6 flex h-11 w-full justify-start overflow-x-auto rounded-xl border-none p-1 no-scrollbar lg:w-fit">
           <TabsTrigger value="general" className="gap-2 px-5 shrink-0">
             <SettingsIcon className="h-4 w-4" /> 通用
           </TabsTrigger>
@@ -411,7 +411,7 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
-          <Card className="border-none bg-card/50 shadow-md backdrop-blur-md">
+          <Card className="glass-card border-none shadow-md">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <AppWindow className="h-4 w-4 text-primary" />
@@ -458,7 +458,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="appearance" className="space-y-6">
-          <Card className="border-none bg-card/50 shadow-md backdrop-blur-md">
+          <Card className="glass-card border-none shadow-md">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Palette className="h-4 w-4 text-primary" />
@@ -506,7 +506,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="gateway" className="space-y-4">
-          <Card className="border-none bg-card/50 shadow-md backdrop-blur-md">
+          <Card className="glass-card border-none shadow-md">
             <CardHeader>
               <CardTitle className="text-base">网关策略</CardTitle>
               <CardDescription>配置账号选路和请求头处理方式</CardDescription>
@@ -723,7 +723,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="tasks" className="space-y-4">
-          <Card className="border-none bg-card/50 shadow-md backdrop-blur-md">
+          <Card className="glass-card border-none shadow-md">
             <CardHeader>
               <CardTitle className="text-base">后台任务线程</CardTitle>
               <CardDescription>管理自动轮询和保活任务</CardDescription>
@@ -793,7 +793,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-none bg-card/50 shadow-md backdrop-blur-md">
+          <Card className="glass-card border-none shadow-md">
             <CardHeader>
               <CardTitle className="text-base">Worker 并发参数</CardTitle>
               <CardDescription>调整执行单元并发规模（重启后生效）</CardDescription>
@@ -837,7 +837,7 @@ export default function SettingsPage() {
 
         <TabsContent value="env" className="space-y-4">
           <div className="grid gap-6 md:grid-cols-[300px_1fr]">
-            <Card className="flex h-[500px] flex-col border-none bg-card/50 shadow-md">
+            <Card className="glass-card flex h-[500px] flex-col border-none shadow-md">
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -870,7 +870,7 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            <Card className="min-h-[500px] border-none bg-card/50 shadow-md">
+            <Card className="glass-card min-h-[500px] border-none shadow-md">
               {selectedEnvKey ? (
                 <>
                   <CardHeader>

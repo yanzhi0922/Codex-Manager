@@ -160,10 +160,10 @@ export default function ApiKeysPage() {
         </div>
       </div>
 
-      <Card className="glass-card overflow-hidden border-none shadow-xl backdrop-blur-md">
+      <Card className="glass-card overflow-hidden border-none py-0 shadow-xl backdrop-blur-md">
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-muted/30">
+            <TableHeader>
               <TableRow>
                 <TableHead>密钥 / ID</TableHead>
                 <TableHead>名称</TableHead>
@@ -202,7 +202,7 @@ export default function ApiKeysPage() {
                   const isEnabled = String(key.status).toLowerCase() !== "disabled";
 
                   return (
-                    <TableRow key={key.id} className="group transition-colors hover:bg-muted/30">
+                    <TableRow key={key.id} className="group">
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <code className="rounded border border-primary/5 bg-muted/50 px-2 py-1 font-mono text-[10px] text-primary">

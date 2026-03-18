@@ -123,12 +123,18 @@ jobs:
           bundles: nsis
           shell-type: pwsh
 
-      - name: Stage portable package
+      - name: Stage desktop release assets
         shell: pwsh
         run: |
           $releaseDir = "apps/src-tauri/target/release"
+          $bundleDir = Join-Path $releaseDir "bundle"
           $portableDir = Join-Path $releaseDir "portable"
+          $desktopAssetsDir = Join-Path $releaseDir "release-assets"
+          $version = (Get-Content "apps/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json).version
+          $arch = if ("${{ runner.arch }}" -eq "ARM64") { "arm64" } else { "x64" }
           New-Item -ItemType Directory -Force $portableDir | Out-Null
+          Remove-Item -Recurse -Force $desktopAssetsDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $desktopAssetsDir | Out-Null
 
           $source = Join-Path $releaseDir "CodexManager.exe"
           if (-not (Test-Path $source -PathType Leaf)) {
@@ -138,6 +144,21 @@ jobs:
           $portableBinary = Join-Path $portableDir "CodexManager-portable.exe"
           Copy-Item -Force $source $portableBinary
           Write-Host "portable binary: $portableBinary"
+
+          $installerSource = Get-ChildItem -Path $bundleDir -Recurse -File |
+            Where-Object { $_.Name -like "*-setup.exe" -and $_.Name -notlike "*portable*" } |
+            Sort-Object FullName |
+            Select-Object -First 1
+          if (-not $installerSource) {
+            throw "windows setup installer not found under: $bundleDir"
+          }
+
+          $installerTarget = Join-Path $desktopAssetsDir "CodexManager_${version}_${arch}-setup.exe"
+          Copy-Item -Force $installerSource.FullName $installerTarget
+          Copy-Item -Force $portableBinary (Join-Path $desktopAssetsDir "CodexManager-portable.exe")
+          Get-ChildItem -Path $desktopAssetsDir -File | ForEach-Object {
+            Write-Host "desktop asset: $($_.FullName)"
+          }
 
       - name: Build service binaries
         shell: pwsh
@@ -160,9 +181,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: codexmanager-windows
-          path: |
-            apps/src-tauri/target/release/bundle/**/*.exe
-            apps/src-tauri/target/release/portable/*.exe
+          path: apps/src-tauri/target/release/release-assets/*.exe
           if-no-files-found: error
           compression-level: 0
 

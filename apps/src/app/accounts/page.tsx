@@ -75,6 +75,14 @@ import { Account } from "@/types";
 
 type StatusFilter = "all" | "available" | "low_quota";
 
+function formatGroupFilterLabel(value: string) {
+  const nextValue = String(value || "").trim();
+  if (!nextValue || nextValue === "all") {
+    return "全部分组";
+  }
+  return nextValue;
+}
+
 interface QuotaProgressProps {
   label: string;
   remainPercent: number | null;
@@ -101,7 +109,9 @@ function QuotaProgress({
           <Icon className="h-3 w-3" />
           <span>{label}</span>
         </div>
-        <span className="font-medium">{remainPercent == null ? emptyText : `${value}%`}</span>
+        <span className="font-medium">
+          {remainPercent == null ? emptyText : `${value}%`}
+        </span>
       </div>
       <Progress
         value={value}
@@ -113,7 +123,11 @@ function QuotaProgress({
 }
 
 function isAccountInactive(account: Account): boolean {
-  return String(account.status || "").trim().toLowerCase() === "inactive";
+  return (
+    String(account.status || "")
+      .trim()
+      .toLowerCase() === "inactive"
+  );
 }
 
 export default function AccountsPage() {
@@ -171,7 +185,8 @@ export default function AccountsPage() {
         !search ||
         account.name.toLowerCase().includes(search.toLowerCase()) ||
         account.id.toLowerCase().includes(search.toLowerCase());
-      const matchGroup = groupFilter === "all" || (account.group || "默认") === groupFilter;
+      const matchGroup =
+        groupFilter === "all" || (account.group || "默认") === groupFilter;
       const matchStatus =
         statusFilter === "all" ||
         (statusFilter === "available" && account.isAvailable) ||
@@ -181,12 +196,18 @@ export default function AccountsPage() {
   }, [accounts, groupFilter, search, statusFilter]);
 
   const pageSizeNumber = Number(pageSize) || 20;
-  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSizeNumber));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredAccounts.length / pageSizeNumber),
+  );
   const safePage = Math.min(page, totalPages);
-  const accountIdSet = useMemo(() => new Set(accounts.map((account) => account.id)), [accounts]);
+  const accountIdSet = useMemo(
+    () => new Set(accounts.map((account) => account.id)),
+    [accounts],
+  );
   const effectiveSelectedIds = useMemo(
     () => selectedIds.filter((id) => accountIdSet.has(id)),
-    [accountIdSet, selectedIds]
+    [accountIdSet, selectedIds],
   );
 
   const visibleAccounts = useMemo(() => {
@@ -196,7 +217,7 @@ export default function AccountsPage() {
 
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.id === selectedAccountId) ?? null,
-    [accounts, selectedAccountId]
+    [accounts, selectedAccountId],
   );
 
   const handleSearchChange = (value: string) => {
@@ -221,13 +242,17 @@ export default function AccountsPage() {
 
   const toggleSelect = (id: string) => {
     setSelectedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
     );
   };
 
   const toggleSelectAllVisible = () => {
     const visibleIds = visibleAccounts.map((account) => account.id);
-    const allSelected = visibleIds.every((id) => effectiveSelectedIds.includes(id));
+    const allSelected = visibleIds.every((id) =>
+      effectiveSelectedIds.includes(id),
+    );
     setSelectedIds((current) => {
       if (allSelected) {
         return current.filter((id) => !visibleIds.includes(id));
@@ -302,28 +327,35 @@ export default function AccountsPage() {
       return;
     }
     deleteManyAccounts(deleteDialogState.ids);
-    setSelectedIds((current) => current.filter((id) => !deleteDialogState.ids.includes(id)));
+    setSelectedIds((current) =>
+      current.filter((id) => !deleteDialogState.ids.includes(id)),
+    );
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-start gap-4 xl:flex-nowrap">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <div className="w-full sm:w-64">
-              <Input
-                placeholder="搜索账号名 / 编号..."
-                className="h-10 bg-card/50 px-3"
-                value={search}
-                onChange={(event) => handleSearchChange(event.target.value)}
-              />
-            </div>
+      <Card className="glass-card border-none shadow-md backdrop-blur-md">
+        <CardContent className="grid gap-3 pt-0 lg:grid-cols-[200px_auto_minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0">
+            <Input
+              placeholder="搜索账号名 / 编号..."
+              className="glass-card h-10 rounded-xl px-3"
+              value={search}
+              onChange={(event) => handleSearchChange(event.target.value)}
+            />
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
             <Select value={groupFilter} onValueChange={handleGroupFilterChange}>
-              <SelectTrigger className="h-10 w-[160px] shrink-0 bg-card/50">
-                <SelectValue placeholder="全部分组" />
+              <SelectTrigger className="h-10 w-[140px] shrink-0 rounded-xl bg-card/50">
+                <SelectValue placeholder="全部分组">
+                  {(value) => formatGroupFilterLabel(String(value || ""))}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部分组 ({accounts.length})</SelectItem>
+                <SelectItem value="all">
+                  全部分组 ({accounts.length})
+                </SelectItem>
                 {groups.map((group) => (
                   <SelectItem key={group.label} value={group.label}>
                     {group.label} ({group.count})
@@ -331,7 +363,7 @@ export default function AccountsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex shrink-0 items-center rounded-lg border bg-muted/30 p-1">
+            <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-muted/30 p-1">
               {[
                 { id: "all", label: "全部" },
                 { id: "available", label: "可用" },
@@ -339,12 +371,14 @@ export default function AccountsPage() {
               ].map((filter) => (
                 <button
                   key={filter.id}
-                  onClick={() => handleStatusFilterChange(filter.id as StatusFilter)}
+                  onClick={() =>
+                    handleStatusFilterChange(filter.id as StatusFilter)
+                  }
                   className={cn(
-                    "rounded-md px-4 py-1.5 text-xs font-medium transition-all",
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
                     statusFilter === filter.id
                       ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
                   )}
                 >
                   {filter.label}
@@ -353,12 +387,14 @@ export default function AccountsPage() {
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2 self-start">
+          <div className="hidden min-w-0 lg:block" />
+
+          <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-0 lg:justify-self-end">
             <DropdownMenu>
               <DropdownMenuTrigger>
                 <Button
                   variant="outline"
-                  className="h-10 min-w-[132px] justify-between gap-2 rounded-xl border-border/70 bg-card/70 px-3 shadow-sm backdrop-blur-sm"
+                  className="glass-card h-10 min-w-[50px] justify-between gap-2 rounded-xl px-3.5"
                   render={<span />}
                   nativeButton={false}
                 >
@@ -373,19 +409,31 @@ export default function AccountsPage() {
                   <MoreVertical className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 rounded-xl border border-border/70 bg-popover/95 p-2 shadow-xl backdrop-blur-md">
+              <DropdownMenuContent
+                align="end"
+                className="w-64 rounded-xl border border-border/70 bg-popover/95 p-2 shadow-xl backdrop-blur-md"
+              >
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground/80">
                     账号管理
                   </DropdownMenuLabel>
-                  <DropdownMenuItem className="h-9 rounded-lg px-2" onClick={() => setAddAccountModalOpen(true)}>
+                  <DropdownMenuItem
+                    className="h-9 rounded-lg px-2"
+                    onClick={() => setAddAccountModalOpen(true)}
+                  >
                     <Plus className="mr-2 h-4 w-4" /> 添加账号
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="h-9 rounded-lg px-2" onClick={() => importByFile()}>
+                  <DropdownMenuItem
+                    className="h-9 rounded-lg px-2"
+                    onClick={() => importByFile()}
+                  >
                     <FileUp className="mr-2 h-4 w-4" /> 按文件导入
                     <DropdownMenuShortcut>FILE</DropdownMenuShortcut>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="h-9 rounded-lg px-2" onClick={() => importByDirectory()}>
+                  <DropdownMenuItem
+                    className="h-9 rounded-lg px-2"
+                    onClick={() => importByDirectory()}
+                  >
                     <FolderOpen className="mr-2 h-4 w-4" /> 按文件夹导入
                     <DropdownMenuShortcut>DIR</DropdownMenuShortcut>
                   </DropdownMenuItem>
@@ -429,7 +477,9 @@ export default function AccountsPage() {
                     onClick={handleDeleteSelected}
                   >
                     <Trash2 className="mr-2 h-4 w-4" /> 删除选中账号
-                    <DropdownMenuShortcut>{effectiveSelectedIds.length || "-"}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>
+                      {effectiveSelectedIds.length || "-"}
+                    </DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     variant="destructive"
@@ -442,29 +492,34 @@ export default function AccountsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
             <Button
-              className="h-10 gap-2 shadow-lg shadow-primary/20"
+              className="h-10 gap-2 rounded-xl shadow-lg shadow-primary/20"
               onClick={() => refreshAllAccounts()}
               disabled={isRefreshingAllAccounts}
             >
               <RefreshCw
-                className={cn("h-4 w-4", isRefreshingAllAccounts && "animate-spin")}
+                className={cn(
+                  "h-4 w-4",
+                  isRefreshingAllAccounts && "animate-spin",
+                )}
               />
               刷新所有
             </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <Card className="overflow-hidden border-none bg-card/50 shadow-xl backdrop-blur-md">
+      <Card className="glass-card overflow-hidden border-none py-0 shadow-xl backdrop-blur-md">
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-muted/30">
+            <TableHeader>
               <TableRow>
                 <TableHead className="w-12 text-center">
                   <Checkbox
                     checked={
                       visibleAccounts.length > 0 &&
-                      visibleAccounts.every((account) => effectiveSelectedIds.includes(account.id))
+                      visibleAccounts.every((account) =>
+                        effectiveSelectedIds.includes(account.id),
+                      )
                     }
                     onCheckedChange={toggleSelectAllVisible}
                   />
@@ -481,13 +536,27 @@ export default function AccountsPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, index) => (
                   <TableRow key={index}>
-                    <TableCell><Skeleton className="mx-auto h-4 w-4" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="mx-auto h-8 w-24" /></TableCell>
+                    <TableCell>
+                      <Skeleton className="mx-auto h-4 w-4" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-32" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-10" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="mx-auto h-8 w-24" />
+                    </TableCell>
                   </TableRow>
                 ))
               ) : visibleAccounts.length === 0 ? (
@@ -501,168 +570,189 @@ export default function AccountsPage() {
                 </TableRow>
               ) : (
                 visibleAccounts.map((account) => {
-                  const primaryWindowOnly = isPrimaryWindowOnlyUsage(account.usage);
-                  const secondaryWindowOnly = isSecondaryWindowOnlyUsage(account.usage);
+                  const primaryWindowOnly = isPrimaryWindowOnlyUsage(
+                    account.usage,
+                  );
+                  const secondaryWindowOnly = isSecondaryWindowOnlyUsage(
+                    account.usage,
+                  );
                   const accountInactive = isAccountInactive(account);
                   return (
-                    <TableRow key={account.id} className="group transition-colors hover:bg-muted/30">
-                    <TableCell className="text-center">
-                      <Checkbox
-                        checked={effectiveSelectedIds.includes(account.id)}
-                        onCheckedChange={() => toggleSelect(account.id)}
-                      />
-                    </TableCell>
-                    <TableCell className="max-w-[220px]">
-                      <div className="flex flex-col overflow-hidden">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="truncate text-sm font-semibold">{account.name}</span>
-                          <Badge
-                            variant="secondary"
-                            className="h-4 shrink-0 bg-accent/50 px-1.5 text-[9px]"
-                          >
-                            {account.group || "默认"}
-                          </Badge>
-                          {manualPreferredAccountId === account.id ? (
+                    <TableRow key={account.id} className="group">
+                      <TableCell className="text-center">
+                        <Checkbox
+                          checked={effectiveSelectedIds.includes(account.id)}
+                          onCheckedChange={() => toggleSelect(account.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="max-w-[220px]">
+                        <div className="flex flex-col overflow-hidden">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <span className="truncate text-sm font-semibold">
+                              {account.name}
+                            </span>
                             <Badge
                               variant="secondary"
-                              className="h-4 shrink-0 bg-amber-500/15 px-1.5 text-[9px] text-amber-700 dark:text-amber-300"
+                              className="h-4 shrink-0 bg-accent/50 px-1.5 text-[9px]"
                             >
-                              优先
+                              {account.group || "默认"}
                             </Badge>
-                          ) : null}
+                            {manualPreferredAccountId === account.id ? (
+                              <Badge
+                                variant="secondary"
+                                className="h-4 shrink-0 bg-amber-500/15 px-1.5 text-[9px] text-amber-700 dark:text-amber-300"
+                              >
+                                优先
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <span className="truncate font-mono text-[10px] uppercase text-muted-foreground opacity-60">
+                            {account.id.slice(0, 16)}...
+                          </span>
+                          <span className="mt-1 text-[10px] text-muted-foreground">
+                            最近刷新:{" "}
+                            {formatTsFromSeconds(
+                              account.lastRefreshAt,
+                              "从未刷新",
+                            )}
+                          </span>
                         </div>
-                        <span className="truncate font-mono text-[10px] uppercase text-muted-foreground opacity-60">
-                          {account.id.slice(0, 16)}...
-                        </span>
-                        <span className="mt-1 text-[10px] text-muted-foreground">
-                          最近刷新: {formatTsFromSeconds(account.lastRefreshAt, "从未刷新")}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <QuotaProgress
-                        label="5小时"
-                        remainPercent={account.primaryRemainPercent}
-                        icon={RefreshCw}
-                        tone="green"
-                        emptyText={secondaryWindowOnly ? "未提供" : "--"}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <QuotaProgress
-                        label="7天"
-                        remainPercent={account.secondaryRemainPercent}
-                        icon={RefreshCw}
-                        tone="blue"
-                        emptyText={primaryWindowOnly ? "未提供" : "--"}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <span className="rounded bg-muted/50 px-2 py-0.5 font-mono text-xs">
-                          {account.priority}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground transition-colors hover:text-primary"
-                          disabled={isUpdatingSortAccountId === account.id}
-                          onClick={() => openSortEditor(account)}
-                          title="编辑顺序"
-                        >
-                          <PencilLine className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            account.isAvailable ? "bg-green-500" : "bg-red-500"
-                          )}
+                      </TableCell>
+                      <TableCell>
+                        <QuotaProgress
+                          label="5小时"
+                          remainPercent={account.primaryRemainPercent}
+                          icon={RefreshCw}
+                          tone="green"
+                          emptyText={secondaryWindowOnly ? "未提供" : "--"}
                         />
-                        <span
-                          className={cn(
-                            "text-[11px] font-medium",
-                            account.isAvailable
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-red-600 dark:text-red-400"
-                          )}
-                        >
-                          {account.availabilityText}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="table-action-cell gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground transition-colors hover:text-primary"
-                          onClick={() => openUsage(account)}
-                          title="用量详情"
-                        >
-                          <BarChart3 className="h-4 w-4" />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              render={<span />}
-                              nativeButton={false}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="gap-2"
-                              disabled={isUpdatingPreferred}
-                              onClick={() =>
-                                manualPreferredAccountId === account.id
-                                  ? clearPreferredAccount()
-                                  : setPreferredAccount(account.id)
-                              }
-                            >
-                              <Pin className="h-4 w-4" />
-                              {manualPreferredAccountId === account.id ? "取消优先" : "设为优先"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="gap-2"
-                              disabled={isUpdatingStatusAccountId === account.id}
-                              onClick={() =>
-                                toggleAccountStatus(account.id, accountInactive)
-                              }
-                            >
-                              {accountInactive ? (
-                                <Power className="h-4 w-4" />
-                              ) : (
-                                <PowerOff className="h-4 w-4" />
-                              )}
-                              {accountInactive ? "启用账号" : "禁用账号"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="gap-2"
-                              onClick={() =>
-                                router.push(`/logs?query=${encodeURIComponent(account.id)}`)
-                              }
-                            >
-                              <ExternalLink className="h-4 w-4" /> 详情与日志
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="gap-2 text-red-500"
-                              onClick={() => handleDeleteSingle(account)}
-                            >
-                              <Trash2 className="h-4 w-4" /> 删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
+                      </TableCell>
+                      <TableCell>
+                        <QuotaProgress
+                          label="7天"
+                          remainPercent={account.secondaryRemainPercent}
+                          icon={RefreshCw}
+                          tone="blue"
+                          emptyText={primaryWindowOnly ? "未提供" : "--"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <span className="rounded bg-muted/50 px-2 py-0.5 font-mono text-xs">
+                            {account.priority}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground transition-colors hover:text-primary"
+                            disabled={isUpdatingSortAccountId === account.id}
+                            onClick={() => openSortEditor(account)}
+                            title="编辑顺序"
+                          >
+                            <PencilLine className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              account.isAvailable
+                                ? "bg-green-500"
+                                : "bg-red-500",
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "text-[11px] font-medium",
+                              account.isAvailable
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-red-600 dark:text-red-400",
+                            )}
+                          >
+                            {account.availabilityText}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="table-action-cell gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground transition-colors hover:text-primary"
+                            onClick={() => openUsage(account)}
+                            title="用量详情"
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                render={<span />}
+                                nativeButton={false}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                className="gap-2"
+                                disabled={isUpdatingPreferred}
+                                onClick={() =>
+                                  manualPreferredAccountId === account.id
+                                    ? clearPreferredAccount()
+                                    : setPreferredAccount(account.id)
+                                }
+                              >
+                                <Pin className="h-4 w-4" />
+                                {manualPreferredAccountId === account.id
+                                  ? "取消优先"
+                                  : "设为优先"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="gap-2"
+                                disabled={
+                                  isUpdatingStatusAccountId === account.id
+                                }
+                                onClick={() =>
+                                  toggleAccountStatus(
+                                    account.id,
+                                    accountInactive,
+                                  )
+                                }
+                              >
+                                {accountInactive ? (
+                                  <Power className="h-4 w-4" />
+                                ) : (
+                                  <PowerOff className="h-4 w-4" />
+                                )}
+                                {accountInactive ? "启用账号" : "禁用账号"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="gap-2"
+                                onClick={() =>
+                                  router.push(
+                                    `/logs?query=${encodeURIComponent(account.id)}`,
+                                  )
+                                }
+                              >
+                                <ExternalLink className="h-4 w-4" /> 详情与日志
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="gap-2 text-red-500"
+                                onClick={() => handleDeleteSingle(account)}
+                              >
+                                <Trash2 className="h-4 w-4" /> 删除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })
@@ -676,12 +766,16 @@ export default function AccountsPage() {
         <div className="text-xs text-muted-foreground">
           共 {filteredAccounts.length} 个账号
           {effectiveSelectedIds.length > 0 ? (
-            <span className="ml-1 text-primary">(已选择 {effectiveSelectedIds.length} 个)</span>
+            <span className="ml-1 text-primary">
+              (已选择 {effectiveSelectedIds.length} 个)
+            </span>
           ) : null}
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <span className="whitespace-nowrap text-xs text-muted-foreground">每页显示</span>
+            <span className="whitespace-nowrap text-xs text-muted-foreground">
+              每页显示
+            </span>
             <Select value={pageSize} onValueChange={handlePageSizeChange}>
               <SelectTrigger className="h-8 w-[70px] text-xs">
                 <SelectValue />
@@ -713,7 +807,9 @@ export default function AccountsPage() {
               size="sm"
               className="h-8 px-3 text-xs"
               disabled={safePage >= totalPages}
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
             >
               下一页
             </Button>
@@ -722,7 +818,10 @@ export default function AccountsPage() {
       </div>
 
       {addAccountModalOpen ? (
-        <AddAccountModal open={addAccountModalOpen} onOpenChange={setAddAccountModalOpen} />
+        <AddAccountModal
+          open={addAccountModalOpen}
+          onOpenChange={setAddAccountModalOpen}
+        />
       ) : null}
       <UsageModal
         account={selectedAccount}
@@ -747,9 +846,7 @@ export default function AccountsPage() {
           }
         }}
         title={
-          deleteDialogState?.kind === "single"
-            ? "删除账号"
-            : "批量删除账号"
+          deleteDialogState?.kind === "single" ? "删除账号" : "批量删除账号"
         }
         description={
           deleteDialogState?.kind === "single"

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { 
   LayoutDashboard, 
@@ -13,8 +12,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { isTauriRuntime } from "@/lib/api/transport";
 import { useAppStore } from "@/lib/store/useAppStore";
-import { memo, useEffect, useMemo } from "react";
+import {
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type MouseEvent,
+} from "react";
 
 const NAV_ITEMS = [
   { name: "仪表盘", href: "/", icon: LayoutDashboard },
@@ -23,16 +31,27 @@ const NAV_ITEMS = [
   { name: "请求日志", href: "/logs/", icon: FileText },
   { name: "设置", href: "/settings/", icon: Settings },
 ];
+const DESKTOP_NAVIGATION_FALLBACK_MS = 500;
 
 function normalizeRoutePath(path: string) {
   if (path === "/") return path;
   return path.replace(/\/+$/, "");
 }
 
-const NavItem = memo(({ item, isActive, isSidebarOpen }: { item: typeof NAV_ITEMS[0], isActive: boolean, isSidebarOpen: boolean }) => (
-  <Link
+const NavItem = memo(({
+  item,
+  isActive,
+  isSidebarOpen,
+  onNavigate,
+}: {
+  item: typeof NAV_ITEMS[0],
+  isActive: boolean,
+  isSidebarOpen: boolean,
+  onNavigate: (href: string, event: MouseEvent<HTMLAnchorElement>) => void,
+}) => (
+  <a
     href={item.href}
-    prefetch={true}
+    onClick={(event) => onNavigate(item.href, event)}
     className={cn(
       "flex items-center gap-3 rounded-lg px-3 py-2 transition-all duration-200 hover:bg-accent hover:text-accent-foreground",
       isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground"
@@ -40,7 +59,7 @@ const NavItem = memo(({ item, isActive, isSidebarOpen }: { item: typeof NAV_ITEM
   >
     <item.icon className="h-4 w-4 shrink-0" />
     {isSidebarOpen && <span className="text-sm truncate">{item.name}</span>}
-  </Link>
+  </a>
 ));
 
 NavItem.displayName = "NavItem";
@@ -50,8 +69,62 @@ export function Sidebar() {
   const router = useRouter();
   const { isSidebarOpen, toggleSidebar } = useAppStore();
   const normalizedPathname = normalizeRoutePath(pathname);
+  const isDesktopStaticRuntime = isTauriRuntime();
+  const desktopNavigationFallbackTimerRef = useRef<number | null>(null);
+
+  const handleNavigate = useCallback(
+    (href: string, event: MouseEvent<HTMLAnchorElement>) => {
+      const nextPath = normalizeRoutePath(href);
+      if (nextPath === normalizedPathname) {
+        event.preventDefault();
+        return;
+      }
+
+      event.preventDefault();
+      if (isDesktopStaticRuntime) {
+        const currentPath = normalizeRoutePath(window.location.pathname);
+        if (desktopNavigationFallbackTimerRef.current !== null) {
+          window.clearTimeout(desktopNavigationFallbackTimerRef.current);
+        }
+
+        startTransition(() => {
+          router.push(href);
+        });
+
+        desktopNavigationFallbackTimerRef.current = window.setTimeout(() => {
+          desktopNavigationFallbackTimerRef.current = null;
+          if (normalizeRoutePath(window.location.pathname) === currentPath) {
+            window.location.assign(href);
+          }
+        }, DESKTOP_NAVIGATION_FALLBACK_MS);
+        return;
+      }
+
+      router.push(href);
+    },
+    [isDesktopStaticRuntime, normalizedPathname, router],
+  );
 
   useEffect(() => {
+    if (desktopNavigationFallbackTimerRef.current !== null) {
+      window.clearTimeout(desktopNavigationFallbackTimerRef.current);
+      desktopNavigationFallbackTimerRef.current = null;
+    }
+  }, [normalizedPathname]);
+
+  useEffect(() => {
+    return () => {
+      if (desktopNavigationFallbackTimerRef.current !== null) {
+        window.clearTimeout(desktopNavigationFallbackTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isDesktopStaticRuntime) {
+      return;
+    }
+
     const runtime = globalThis as typeof globalThis & {
       requestIdleCallback?: (
         callback: IdleRequestCallback,
@@ -77,7 +150,7 @@ export function Sidebar() {
 
     const timer = globalThis.setTimeout(prefetchRoutes, 120);
     return () => globalThis.clearTimeout(timer);
-  }, [normalizedPathname, router]);
+  }, [isDesktopStaticRuntime, normalizedPathname, router]);
 
   const renderedItems = useMemo(() => 
     NAV_ITEMS.map((item) => (
@@ -85,10 +158,11 @@ export function Sidebar() {
         key={item.href} 
         item={item} 
         isActive={normalizeRoutePath(item.href) === normalizedPathname} 
-        isSidebarOpen={isSidebarOpen} 
+        isSidebarOpen={isSidebarOpen}
+        onNavigate={handleNavigate}
       />
     )),
-    [normalizedPathname, isSidebarOpen]
+    [handleNavigate, normalizedPathname, isSidebarOpen]
   );
 
   return (
