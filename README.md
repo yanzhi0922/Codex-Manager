@@ -10,7 +10,9 @@
   <a href="README.en.md">English</a>
 </p>
 
-- [赞助支持](README.md#sponsor)
+<p align="center">
+  <a href="#sponsor">赞助支持</a>
+</p>
 
 本地桌面端 + 服务进程的 Codex 账号池管理器，用于统一管理账号、用量与平台 Key，并提供本地网关能力。
 

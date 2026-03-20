@@ -10,7 +10,9 @@
   <a href="README.md">中文</a>
 </p>
 
-- [Sponsor](README.en.md#sponsor)
+- <p align="center">
+  <a href="#sponsor">sponsor</a>
+</p>
 
 A local desktop + service toolkit for managing Codex-compatible accounts, usage, platform keys, and a built-in local gateway.
 
