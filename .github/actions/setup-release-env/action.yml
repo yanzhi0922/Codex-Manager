@@ -13,7 +13,9 @@ inputs:
   pnpm-lock-path:
     description: Lockfile path used for pnpm cache.
     required: false
-    default: apps/pnpm-lock.yaml
+    default: |
+      apps/pnpm-lock.yaml
+      .github/workflows/release-all.yml
   enable-pnpm-cache:
     description: Enable pnpm store cache through actions/setup-node.
     required: false
@@ -72,5 +74,5 @@ runs:
       with:
         shared-key: ${{ inputs.rust-cache-shared-key }}
         workspaces: |
-          . -> target
-          apps/src-tauri -> target
+          . -> target-shared
+          apps/src-tauri -> target-shared

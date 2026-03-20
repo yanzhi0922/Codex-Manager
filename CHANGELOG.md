@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-03-20
+
+### Fixed
+- 修复平台密钥名称编辑链路在桌面端未完整透传的问题；现在 Web 与桌面端都能正确保存并回显名称，且支持中文名称。
+- 修复平台密钥列表中密钥 ID 默认被截断的问题；现在会直接完整显示，便于核对与排查。
+
+### Changed
+- README 新增赞助支持入口与赞助区跳转，方便从文档顶部直接定位到赞助说明。
+- 发布版本提升到 `0.1.12`，同步更新 workspace、前端包、Tauri 桌面端、版本一致性校验脚本与 README 最新版本说明。
+
 ## [0.1.11] - 2026-03-20
 
 ### Added
@@ -126,8 +136,9 @@
 ### Changed
 - 账号管理页操作区整合为单一“账号操作”下拉菜单，替代右侧多按钮堆叠，界面更简洁。
 
-[Unreleased]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.11...HEAD
-[0.1.11]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.11
+[Unreleased]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.12
+[0.1.11]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.10
 [0.1.9]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.9
 [0.1.8]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.8
