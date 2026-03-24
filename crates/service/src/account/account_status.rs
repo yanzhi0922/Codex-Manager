@@ -4,7 +4,7 @@ use codexmanager_core::storage::{now_ts, Event, Storage};
 pub(crate) enum AccountAvailabilitySignal {
     RefreshToken(crate::usage_http::RefreshTokenAuthErrorReason),
     Deactivation(&'static str),
-    UsageHttp401,
+    UsageHttp(u16),
 }
 
 fn latest_status_reason(storage: &Storage, account_id: &str) -> Option<String> {
@@ -57,10 +57,19 @@ pub(crate) fn classify_account_availability_signal(
     if let Some(reason) = deactivation_reason_from_message(err) {
         return Some(AccountAvailabilitySignal::Deactivation(reason));
     }
-    if err.starts_with("usage endpoint status 401") {
-        return Some(AccountAvailabilitySignal::UsageHttp401);
+    if let Some(status_code) = extract_usage_http_status_code(err) {
+        return Some(AccountAvailabilitySignal::UsageHttp(status_code));
     }
     None
+}
+
+fn extract_usage_http_status_code(message: &str) -> Option<u16> {
+    let rest = message.trim().strip_prefix("usage endpoint status ")?;
+    let digits: String = rest.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<u16>().ok()
 }
 
 pub(crate) fn deactivation_reason_from_message(message: &str) -> Option<&'static str> {
@@ -104,11 +113,18 @@ pub(crate) fn mark_account_unavailable_for_usage_http_error(
     account_id: &str,
     err: &str,
 ) -> bool {
-    let Some(AccountAvailabilitySignal::UsageHttp401) = classify_account_availability_signal(err)
+    let Some(AccountAvailabilitySignal::UsageHttp(status_code)) =
+        classify_account_availability_signal(err)
     else {
         return false;
     };
-    set_account_unavailable_with_reason(storage, account_id, "usage_http_401")
+    match status_code {
+        401 | 403 | 429 => {
+            let status_reason = format!("usage_http_{status_code}");
+            set_account_unavailable_with_reason(storage, account_id, &status_reason)
+        }
+        _ => false,
+    }
 }
 
 pub(crate) fn mark_account_unavailable_for_deactivation_error(
@@ -140,7 +156,7 @@ pub(crate) fn mark_account_unavailable_for_auth_error(
         AccountAvailabilitySignal::Deactivation(reason) => {
             set_account_unavailable_with_reason(storage, account_id, reason)
         }
-        AccountAvailabilitySignal::UsageHttp401 => false,
+        AccountAvailabilitySignal::UsageHttp(_) => false,
     }
 }
 
@@ -166,7 +182,15 @@ mod tests {
     fn classify_account_availability_signal_separates_usage_refresh_and_deactivation() {
         assert!(matches!(
             classify_account_availability_signal("usage endpoint status 401 Unauthorized"),
-            Some(AccountAvailabilitySignal::UsageHttp401)
+            Some(AccountAvailabilitySignal::UsageHttp(401))
+        ));
+        assert!(matches!(
+            classify_account_availability_signal("usage endpoint status 403 Forbidden"),
+            Some(AccountAvailabilitySignal::UsageHttp(403))
+        ));
+        assert!(matches!(
+            classify_account_availability_signal("usage endpoint status 429 Too Many Requests"),
+            Some(AccountAvailabilitySignal::UsageHttp(429))
         ));
 
         assert!(matches!(

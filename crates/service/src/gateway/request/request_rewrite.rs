@@ -455,6 +455,15 @@ fn apply_request_overrides_with_prompt_cache_key_mode(
                     if responses::ensure_reasoning_include(path, obj) {
                         changed = true;
                     }
+                    let existing_prompt_cache_key = obj
+                        .get("prompt_cache_key")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    let prompt_cache_key_decision = request_rewrite_prompt_cache::resolve_prompt_cache_key_rewrite(
+                        existing_prompt_cache_key.as_deref(),
+                        prompt_cache_key,
+                        force_prompt_cache_key,
+                    );
                     if responses::ensure_prompt_cache_key(
                         path,
                         obj,
@@ -463,6 +472,20 @@ fn apply_request_overrides_with_prompt_cache_key_mode(
                     ) {
                         changed = true;
                     }
+                    log::debug!(
+                        "event=gateway_prompt_cache_key_summary path={} source={} force_override={} changed={} codex_compat={} compact={} final_present={}",
+                        path,
+                        prompt_cache_key_decision.source.as_str(),
+                        if force_prompt_cache_key { "true" } else { "false" },
+                        if prompt_cache_key_decision.changed { "true" } else { "false" },
+                        if use_codex_responses_compat { "true" } else { "false" },
+                        if responses::is_compact_path(path) { "true" } else { "false" },
+                        if obj.get("prompt_cache_key").and_then(Value::as_str).is_some() {
+                            "true"
+                        } else {
+                            "false"
+                        },
+                    );
                 }
                 if responses::ensure_instructions(path, obj) {
                     changed = true;

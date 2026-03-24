@@ -59,6 +59,10 @@
 - `e3a7557`：移除 upstream cookie 链路。当前主路径不再依赖全局上游 Cookie，出站请求行为继续向官方 Codex 收口。
 
 
+## Star 曲线
+<p align="center">
+  <img src="assets/images/star-history-2026324.png" alt="Star 曲线" width="900" />
+</p>
 
 ## 功能概览
 - 账号池管理：分组、标签、排序、备注、封禁识别与封禁筛选
