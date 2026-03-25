@@ -6,6 +6,7 @@ const AGGREGATE_API_SELECT_SQL: &str = "SELECT
     id,
     provider_type,
     supplier_name,
+    sort,
     url,
     status,
     created_at,
@@ -22,6 +23,7 @@ impl Storage {
                 id,
                 provider_type,
                 supplier_name,
+                sort,
                 url,
                 status,
                 created_at,
@@ -29,11 +31,12 @@ impl Storage {
                 last_test_at,
                 last_test_status,
                 last_test_error
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             (
                 &api.id,
                 &api.provider_type,
                 &api.supplier_name,
+                api.sort,
                 &api.url,
                 &api.status,
                 api.created_at,
@@ -49,7 +52,7 @@ impl Storage {
     pub fn list_aggregate_apis(&self) -> Result<Vec<AggregateApi>> {
         let mut stmt = self
             .conn
-            .prepare(&format!("{AGGREGATE_API_SELECT_SQL} ORDER BY created_at DESC"))?;
+            .prepare(&format!("{AGGREGATE_API_SELECT_SQL} ORDER BY sort ASC, updated_at DESC"))?;
         let mut rows = stmt.query([])?;
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
@@ -88,6 +91,14 @@ impl Storage {
         self.conn.execute(
             "UPDATE aggregate_apis SET supplier_name = ?1, updated_at = ?2 WHERE id = ?3",
             (supplier_name, now_ts(), api_id),
+        )?;
+        Ok(())
+    }
+
+    pub fn update_aggregate_api_sort(&self, api_id: &str, sort: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE aggregate_apis SET sort = ?1, updated_at = ?2 WHERE id = ?3",
+            (sort, now_ts(), api_id),
         )?;
         Ok(())
     }
@@ -169,6 +180,7 @@ impl Storage {
                 id TEXT PRIMARY KEY,
                 provider_type TEXT NOT NULL DEFAULT 'codex',
                 supplier_name TEXT,
+                sort INTEGER NOT NULL DEFAULT 0,
                 url TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at INTEGER NOT NULL,
@@ -185,10 +197,17 @@ impl Storage {
         )?;
         self.ensure_column("aggregate_apis", "provider_type", "TEXT")?;
         self.ensure_column("aggregate_apis", "supplier_name", "TEXT")?;
+        self.ensure_column("aggregate_apis", "sort", "INTEGER DEFAULT 0")?;
         self.conn.execute(
             "UPDATE aggregate_apis
              SET provider_type = COALESCE(NULLIF(TRIM(provider_type), ''), 'codex')
              WHERE provider_type IS NULL OR TRIM(provider_type) = ''",
+            [],
+        )?;
+        self.conn.execute(
+            "UPDATE aggregate_apis
+             SET sort = COALESCE(sort, 0)
+             WHERE sort IS NULL",
             [],
         )?;
         Ok(())
@@ -217,12 +236,13 @@ fn map_aggregate_api_row(row: &Row<'_>) -> Result<AggregateApi> {
         id: row.get(0)?,
         provider_type: row.get(1)?,
         supplier_name: row.get(2)?,
-        url: row.get(3)?,
-        status: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
-        last_test_at: row.get(7)?,
-        last_test_status: row.get(8)?,
-        last_test_error: row.get(9)?,
+        sort: row.get(3)?,
+        url: row.get(4)?,
+        status: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        last_test_at: row.get(8)?,
+        last_test_status: row.get(9)?,
+        last_test_error: row.get(10)?,
     })
 }

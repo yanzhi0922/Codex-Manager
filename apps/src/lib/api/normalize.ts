@@ -300,6 +300,7 @@ export function normalizeAggregateApi(item: unknown): AggregateApi | null {
     id,
     providerType: asString(source.providerType ?? source.provider_type) || "codex",
     supplierName: asString(source.supplierName ?? source.supplier_name) || null,
+    sort: asInteger(source.sort ?? source.priority, 0, 0),
     url: asString(source.url),
     status: asString(source.status) || "active",
     createdAt: toNullableNumber(source.createdAt ?? source.created_at),

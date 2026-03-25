@@ -42,17 +42,20 @@ interface AggregateApiModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   aggregateApi?: AggregateApi | null;
+  defaultSort?: number;
 }
 
 export function AggregateApiModal({
   open,
   onOpenChange,
   aggregateApi,
+  defaultSort = 0,
 }: AggregateApiModalProps) {
   const serviceStatus = useAppStore((state) => state.serviceStatus);
   const { canAccessManagementRpc } = useRuntimeCapabilities();
   const [providerType, setProviderType] = useState("codex");
   const [supplierName, setSupplierName] = useState("");
+  const [sortDraft, setSortDraft] = useState("0");
   const [url, setUrl] = useState("");
   const [key, setKey] = useState("");
   const [generatedKey, setGeneratedKey] = useState("");
@@ -68,10 +71,11 @@ export function AggregateApiModal({
     const nextProviderType = aggregateApi?.providerType || "codex";
     setProviderType(nextProviderType);
     setSupplierName(aggregateApi?.supplierName || "");
+    setSortDraft(String(aggregateApi?.sort ?? defaultSort));
     setUrl(aggregateApi?.url || AGGREGATE_API_DEFAULT_URLS[nextProviderType]);
     setKey("");
     setGeneratedKey("");
-  }, [aggregateApi, open]);
+  }, [aggregateApi, defaultSort, open]);
 
   const handleSave = async () => {
     if (!isServiceReady) {
@@ -90,6 +94,16 @@ export function AggregateApiModal({
       toast.error("请输入供应商名称");
       return;
     }
+    const rawSort = sortDraft.trim();
+    if (!rawSort) {
+      toast.error("请输入顺序值");
+      return;
+    }
+    const parsedSort = Number(rawSort);
+    if (!Number.isFinite(parsedSort)) {
+      toast.error("顺序必须是数字");
+      return;
+    }
     if (!aggregateApi?.id && !key.trim()) {
       toast.error("请输入聚合 API 密钥");
       return;
@@ -101,6 +115,7 @@ export function AggregateApiModal({
         await accountClient.updateAggregateApi(aggregateApi.id, {
           providerType,
           supplierName,
+          sort: parsedSort,
           url,
           key: key || null,
         });
@@ -117,6 +132,7 @@ export function AggregateApiModal({
       const result = await accountClient.createAggregateApi({
         providerType,
         supplierName,
+        sort: parsedSort,
         url,
         key,
       });
@@ -178,6 +194,22 @@ export function AggregateApiModal({
               disabled={!isServiceReady}
               onChange={(event) => setSupplierName(event.target.value)}
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="aggregate-api-sort">顺序值</Label>
+            <Input
+              id="aggregate-api-sort"
+              type="number"
+              min={0}
+              step={1}
+              value={sortDraft}
+              disabled={!isServiceReady}
+              onChange={(event) => setSortDraft(event.target.value)}
+            />
+            <p className="text-[11px] leading-4 text-muted-foreground">
+              值越小越靠前，用于聚合 API 轮转优先级
+            </p>
           </div>
 
           <div className="grid gap-2">
@@ -250,9 +282,11 @@ export function AggregateApiModal({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {generatedKey ? "关闭" : "取消"}
-          </Button>
+          {!generatedKey ? (
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+          ) : null}
           {!generatedKey ? (
             <Button onClick={() => void handleSave()} disabled={!isServiceReady || isLoading}>
               {isLoading ? "保存中..." : "完成"}

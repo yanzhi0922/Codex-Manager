@@ -4,6 +4,8 @@ ALTER TABLE api_keys ADD COLUMN aggregate_api_id TEXT;
 CREATE TABLE IF NOT EXISTS aggregate_apis (
   id TEXT PRIMARY KEY,
   provider_type TEXT NOT NULL DEFAULT 'codex',
+  supplier_name TEXT,
+  sort INTEGER NOT NULL DEFAULT 0,
   url TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
   created_at INTEGER NOT NULL,

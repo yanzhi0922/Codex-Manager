@@ -100,6 +100,7 @@ export default function AggregateApiPage() {
     Record<string, string>
   >({});
   const [loadingSecretId, setLoadingSecretId] = useState<string | null>(null);
+  const [testingApiId, setTestingApiId] = useState<string | null>(null);
 
   const { data: aggregateApis = [], isLoading } = useQuery({
     queryKey: ["aggregate-apis"],
@@ -129,6 +130,14 @@ export default function AggregateApiPage() {
     return aggregateApis.filter((api) => api.providerType === providerFilter);
   }, [aggregateApis, providerFilter]);
 
+  const defaultCreateSort = useMemo(() => {
+    const maxSort = aggregateApis.reduce(
+      (max, api) => Math.max(max, Number(api.sort) || 0),
+      0,
+    );
+    return maxSort + 5;
+  }, [aggregateApis]);
+
   const renderTestStatus = (api: AggregateApi) => {
     const badge = getTestBadge(api);
     if (api.lastTestStatus !== "failed" || !api.lastTestError) {
@@ -150,6 +159,9 @@ export default function AggregateApiPage() {
   const testMutation = useMutation({
     mutationFn: (apiId: string) =>
       accountClient.testAggregateApiConnection(apiId),
+    onMutate: async (apiId) => {
+      setTestingApiId(apiId);
+    },
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["aggregate-apis"] });
       toast.success(
@@ -157,6 +169,9 @@ export default function AggregateApiPage() {
           ? "连通性测试成功"
           : `连通性测试失败: ${result.message || result.statusCode || ""}`,
       );
+    },
+    onSettled: async (_result, _error, apiId) => {
+      setTestingApiId((current) => (current === apiId ? null : current));
     },
     onError: (error: unknown) => {
       toast.error(
@@ -243,26 +258,18 @@ export default function AggregateApiPage() {
         </Card>
       ) : null}
 
-      <div className="flex items-center justify-between">
+      <div>
         <div>
-          <h2 className="text-xl font-bold tracking-tight">聚合 API</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             管理上游聚合地址与密钥，并测试连通性
           </p>
         </div>
-        <Button
-          className="h-10 gap-2 shadow-lg shadow-primary/20"
-          onClick={openCreateModal}
-          disabled={!isServiceReady}
-        >
-          <Plus className="h-4 w-4" /> 新建聚合 API
-        </Button>
       </div>
 
       <div className="space-y-4">
         <Card className="glass-card border-none shadow-xl backdrop-blur-md">
-          <CardContent className="px-4">
-            <div className="flex items-center justify-between gap-3">
+          <CardContent className="px-4 ">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">查询</span>
                 <Select
@@ -285,8 +292,17 @@ export default function AggregateApiPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="text-xs text-muted-foreground">
-                共 {filteredAggregateApis.length} 条
+              <div className="flex items-center gap-3">
+                <div className="text-xs text-muted-foreground">
+                  共 {filteredAggregateApis.length} 条
+                </div>
+                <Button
+                  className="h-10 gap-2 shadow-lg shadow-primary/20"
+                  onClick={openCreateModal}
+                  disabled={!isServiceReady}
+                >
+                  <Plus className="h-4 w-4" /> 新建聚合 API
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -294,14 +310,14 @@ export default function AggregateApiPage() {
 
         <Card className="glass-card overflow-hidden border-none py-0 shadow-xl backdrop-blur-md">
           <CardContent className="p-0">
-            <Table className="table-fixed">
+            <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead>供应商名称</TableHead>
-                  <TableHead>URL</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>密钥</TableHead>
-                  <TableHead>测试连通性</TableHead>
+                  <TableHead className="max-w-[220px]">供应商 / URL</TableHead>
+                  <TableHead className="w-[84px] text-center">类型</TableHead>
+                  <TableHead className="w-[148px]">密钥</TableHead>
+                  <TableHead className="w-[64px] text-center">顺序</TableHead>
+                  <TableHead className="w-[130px]">测试连通性</TableHead>
                   <TableHead className="text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -313,16 +329,16 @@ export default function AggregateApiPage() {
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-64" />
+                        <Skeleton className="h-6 w-12 rounded-full" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-6 w-16 rounded-full" />
+                        <Skeleton className="h-4 w-28" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="mx-auto h-4 w-12" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-6 w-24 rounded-full" />
+                        <Skeleton className="h-6 w-20 rounded-full" />
                       </TableCell>
                       <TableCell className="text-center">
                         <Skeleton className="mx-auto h-8 w-8" />
@@ -353,24 +369,28 @@ export default function AggregateApiPage() {
                     return (
                       <TableRow key={api.id} className="group">
                         <TableCell className="overflow-hidden">
-                          <span
-                            className="block truncate text-xs text-muted-foreground"
-                            title={api.supplierName || "-"}
-                          >
-                            {api.supplierName || "-"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
                           <Tooltip>
                             <TooltipTrigger
                               render={<div />}
-                              className="block cursor-help text-left overflow-hidden"
+                              className="block cursor-help text-left"
                             >
-                              <span className="block truncate">{api.url}</span>
+                              <div className="grid gap-0.5 overflow-hidden">
+                                <span className="block truncate text-xs font-medium text-foreground">
+                                  {api.supplierName || "-"}
+                                </span>
+                                <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                                  {api.url}
+                                </span>
+                              </div>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-sm whitespace-pre-wrap break-words">
                               <div className="grid gap-1">
-                                <div className="break-all">{api.url}</div>
+                                <div className="text-[11px] font-medium">
+                                  {api.supplierName || "-"}
+                                </div>
+                                <div className="break-all text-xs">
+                                  {api.url}
+                                </div>
                                 <div className="text-[11px] opacity-80">
                                   创建时间: {createdTimeText}
                                 </div>
@@ -378,81 +398,90 @@ export default function AggregateApiPage() {
                             </TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="w-fit">
-                            {AGGREGATE_API_PROVIDER_LABELS[api.providerType] ||
-                              api.providerType}
-                          </Badge>
-                        </TableCell>
-                      <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={<div />}
-                            className="block cursor-help"
-                          >
-                            <div className="flex items-center gap-2">
-                              <code
-                                className="max-w-[260px] truncate rounded border border-primary/5 bg-muted/50 px-2 py-1 font-mono text-[10px] leading-4 text-primary"
-                              >
-                                {revealed
-                                  ? revealed
-                                  : loadingSecretId === api.id
-                                    ? "读取中..."
-                                    : api.id}
-                              </code>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-primary"
-                                disabled={!isServiceReady}
-                                onClick={() => void toggleSecret(api.id)}
-                              >
-                                {revealed ? (
-                                  <EyeOff className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Eye className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-primary"
-                                disabled={!isServiceReady}
-                                onClick={() => void copySecret(api.id)}
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-sm whitespace-pre-wrap break-words">
-                            {revealed || api.id}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            {renderTestStatus(api)}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-2"
-                              disabled={
-                                !isServiceReady || testMutation.isPending
-                              }
-                              onClick={() => testMutation.mutate(api.id)}
+                        <TableCell className="text-center">
+                          <div className="flex justify-center">
+                            <Badge
+                              variant="secondary"
+                              className="w-fit text-[10px] font-normal"
                             >
-                              <RefreshCw
-                                className={
-                                  testMutation.isPending
-                                    ? "h-3.5 w-3.5 animate-spin"
-                                    : "h-3.5 w-3.5"
-                                }
-                              />
-                              测试
+                              {AGGREGATE_API_PROVIDER_LABELS[
+                                api.providerType
+                              ] || api.providerType}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="overflow-hidden">
+                          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={<div />}
+                                className="block min-w-0 cursor-help"
+                              >
+                                <code className="block min-w-0 flex-1 truncate rounded border border-primary/5 bg-muted/50 px-2 py-1 font-mono text-[10px] leading-4 text-primary">
+                                  {revealed
+                                    ? revealed
+                                    : loadingSecretId === api.id
+                                      ? "读取中..."
+                                      : api.id}
+                                </code>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-sm whitespace-pre-wrap break-words">
+                                {revealed || api.id}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary"
+                              disabled={!isServiceReady}
+                              onClick={() => void toggleSecret(api.id)}
+                            >
+                              {revealed ? (
+                                <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary"
+                              disabled={!isServiceReady}
+                              onClick={() => void copySecret(api.id)}
+                            >
+                              <Copy className="h-3.5 w-3.5" />
                             </Button>
                           </div>
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs text-muted-foreground">
+                          {api.sort}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap align-middle">
+                          <div className="flex flex-col items-start gap-1">
+                            <div className="flex items-center gap-2">
+                              {renderTestStatus(api)}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                disabled={
+                                  !isServiceReady || testingApiId === api.id
+                                }
+                                onClick={() => testMutation.mutate(api.id)}
+                              >
+                                <RefreshCw
+                                  className={
+                                    testingApiId === api.id
+                                      ? "h-3.5 w-3.5 animate-spin"
+                                      : "h-3.5 w-3.5"
+                                  }
+                                />
+                                测试
+                              </Button>
+                            </div>
+                          </div>
                           {api.lastTestAt ? (
-                            <p className="mt-1 text-[11px] text-muted-foreground">
+                            <p className="mt-1 text-[10px] text-muted-foreground">
                               {formatTsFromSeconds(api.lastTestAt, "未知时间")}
                             </p>
                           ) : null}
@@ -515,6 +544,7 @@ export default function AggregateApiPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         aggregateApi={editingApi}
+        defaultSort={defaultCreateSort}
       />
 
       <ConfirmDialog

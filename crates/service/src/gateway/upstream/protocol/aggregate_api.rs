@@ -215,6 +215,11 @@ pub(in super::super) fn proxy_aggregate_request(
     let status_code = bridge
         .delivered_status_code
         .unwrap_or_else(|| if bridge_ok { 200 } else { 502 });
+    let status_code = if final_error.is_some() && status_code < 400 {
+        502
+    } else {
+        status_code
+    };
     let usage = bridge.usage;
 
     super::super::super::record_gateway_request_outcome(path, status_code, Some("aggregate_api"));
@@ -253,4 +258,38 @@ pub(in super::super) fn proxy_aggregate_request(
         Some(started_at.elapsed().as_millis()),
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn final_error_promotes_success_status_to_bad_gateway() {
+        let status_code = bridge_status_code(Some(200), true, Some("unsupported model"));
+        assert_eq!(status_code, 502);
+    }
+
+    #[test]
+    fn successful_bridge_keeps_success_status() {
+        let status_code = bridge_status_code(Some(200), true, None);
+        assert_eq!(status_code, 200);
+    }
+
+    #[test]
+    fn incomplete_bridge_without_status_defaults_to_bad_gateway() {
+        let status_code = bridge_status_code(None, false, None);
+        assert_eq!(status_code, 502);
+    }
+
+    fn bridge_status_code(
+        delivered_status_code: Option<u16>,
+        bridge_ok: bool,
+        final_error: Option<&str>,
+    ) -> u16 {
+        let status_code = delivered_status_code.unwrap_or_else(|| if bridge_ok { 200 } else { 502 });
+        if final_error.is_some() && status_code < 400 {
+            502
+        } else {
+            status_code
+        }
+    }
 }

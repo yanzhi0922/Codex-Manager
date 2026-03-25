@@ -15,14 +15,22 @@ pub(super) fn try_handle(req: &JsonRpcRequest) -> Option<JsonRpcResponse> {
         "aggregateApi/create" => {
             let provider_type = super::string_param(req, "providerType");
             let supplier_name = super::string_param(req, "supplierName");
+            let sort = super::i64_param(req, "sort");
             let url = super::string_param(req, "url");
             let key = super::string_param(req, "key");
-            super::value_or_error(create_aggregate_api(url, key, provider_type, supplier_name))
+            super::value_or_error(create_aggregate_api(
+                url,
+                key,
+                provider_type,
+                supplier_name,
+                sort,
+            ))
         }
         "aggregateApi/update" => {
             let api_id = super::str_param(req, "id").unwrap_or("");
             let provider_type = super::string_param(req, "providerType");
             let supplier_name = super::string_param(req, "supplierName");
+            let sort = super::i64_param(req, "sort");
             let url = super::string_param(req, "url");
             let key = super::string_param(req, "key");
             super::ok_or_error(update_aggregate_api(
@@ -31,6 +39,7 @@ pub(super) fn try_handle(req: &JsonRpcRequest) -> Option<JsonRpcResponse> {
                 key,
                 provider_type,
                 supplier_name,
+                sort,
             ))
         }
         "aggregateApi/readSecret" => {

@@ -54,6 +54,8 @@ import { formatCompactNumber, formatTsFromSeconds } from "@/lib/utils/usage";
 import { cn } from "@/lib/utils";
 import {
   AccountListResult,
+  AggregateApi,
+  ApiKey,
   RequestLog,
   RequestLogFilterSummary,
   RequestLogListResult,
@@ -222,6 +224,48 @@ function resolveAccountDisplayNameById(
   );
 }
 
+function resolveDisplayedStatusCode(log: RequestLog): number | null {
+  const statusCode = log.statusCode;
+  const hasError = Boolean(String(log.error || "").trim());
+  if (statusCode == null) {
+    return hasError ? 502 : null;
+  }
+  if (hasError && statusCode < 400) {
+    return 502;
+  }
+  return statusCode;
+}
+
+function resolveAggregateApiDisplayName(
+  aggregateApi: AggregateApi | null,
+  apiKey: ApiKey | null,
+): string {
+  if (aggregateApi?.supplierName && aggregateApi.supplierName.trim()) {
+    return aggregateApi.supplierName.trim();
+  }
+  if (apiKey?.aggregateApiUrl) {
+    return apiKey.aggregateApiUrl.trim();
+  }
+  return "-";
+}
+
+function resolveAggregateApiTooltipUrl(
+  aggregateApi: AggregateApi | null,
+  apiKey: ApiKey | null,
+): string {
+  if (aggregateApi?.url && aggregateApi.url.trim()) {
+    return aggregateApi.url.trim();
+  }
+  if (apiKey?.aggregateApiUrl) {
+    return apiKey.aggregateApiUrl.trim();
+  }
+  return "-";
+}
+
+function normalizeAggregateApiUrl(value: string): string {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
 function formatModelEffortDisplay(log: RequestLog): string {
   const model = String(log.model || "").trim();
   const effort = String(log.reasoningEffort || "").trim();
@@ -235,10 +279,14 @@ function AccountKeyInfoCell({
   log,
   accountLabel,
   accountNameMap,
+  apiKeyMap,
+  aggregateApiMap,
 }: {
   log: RequestLog;
   accountLabel: string;
   accountNameMap: Map<string, string>;
+  apiKeyMap: Map<string, ApiKey>;
+  aggregateApiMap: Map<string, AggregateApi>;
 }) {
   const displayAccount = accountLabel || log.accountId || "-";
   const hasNamedAccount =
@@ -254,10 +302,80 @@ function AccountKeyInfoCell({
     log.initialAccountId,
     accountNameMap,
   );
+  const apiKey = apiKeyMap.get(log.keyId) || null;
+  const aggregateApiById = apiKey?.aggregateApiId
+    ? aggregateApiMap.get(apiKey.aggregateApiId) || null
+    : null;
+  const aggregateApiByUrl = (() => {
+    const upstreamUrl = normalizeAggregateApiUrl(log.upstreamUrl);
+    if (!upstreamUrl) return null;
+    for (const aggregateApi of aggregateApiMap.values()) {
+      if (normalizeAggregateApiUrl(aggregateApi.url) === upstreamUrl) {
+        return aggregateApi;
+      }
+    }
+    return null;
+  })();
+  const aggregateApi = aggregateApiById || aggregateApiByUrl;
+  const isAggregateApi = Boolean(aggregateApi);
+  const aggregateApiDisplayName = resolveAggregateApiDisplayName(
+    aggregateApi,
+    apiKey,
+  );
+  const aggregateApiDisplayUrl = resolveAggregateApiTooltipUrl(
+    aggregateApi,
+    apiKey,
+  );
   const showAttemptHint =
     attemptedAccountLabels.length > 1 &&
     initialAccountLabel &&
     initialAccountLabel !== displayAccount;
+
+  if (isAggregateApi) {
+    return (
+      <Tooltip>
+        <TooltipTrigger render={<div />} className="block text-left">
+          <div className="flex max-w-[180px] flex-col gap-0.5 opacity-80">
+            <div className="flex items-center gap-1">
+              <Database className="h-3 w-3 text-primary" />
+              <span className="truncate text-[11px] font-medium">
+                {aggregateApiDisplayName}
+              </span>
+            </div>
+            <div className="truncate font-mono text-[9px] text-muted-foreground">
+              {aggregateApiDisplayUrl}
+            </div>
+            <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+              <Shield className="h-2.5 w-2.5" />
+              <span className="font-mono">{formatCompactKeyLabel(log.keyId)}</span>
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-sm">
+          <div className="flex min-w-[240px] flex-col gap-2">
+            <div className="space-y-0.5">
+              <div className="text-[10px] text-background/70">供应商名称</div>
+              <div className="break-all font-mono text-[11px]">
+                {aggregateApiDisplayName}
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] text-background/70">URL</div>
+              <div className="break-all font-mono text-[11px]">
+                {aggregateApiDisplayUrl}
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] text-background/70">密钥</div>
+              <div className="break-all font-mono text-[11px]">
+                {log.keyId || "-"}
+              </div>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <Tooltip>
@@ -463,7 +581,7 @@ function ModelEffortCell({ log }: { log: RequestLog }) {
 function buildSummaryPlaceholder(logs: RequestLog[]): RequestLogFilterSummary {
   const successCount = logs.filter((item) => {
     const statusCode = item.statusCode ?? 0;
-    return statusCode >= 200 && statusCode < 300;
+    return statusCode >= 200 && statusCode < 300 && !String(item.error || "").trim();
   }).length;
   const errorCount = logs.filter((item) => {
     const statusCode = item.statusCode;
@@ -503,6 +621,7 @@ function LogsPageContent() {
     )
   );
   const startupAccounts = startupSnapshot?.accounts || [];
+  const startupApiKeys = startupSnapshot?.apiKeys || [];
   const startupRequestLogs = startupSnapshot?.requestLogs || [];
   const canUseStartupLogsPlaceholder =
     !routeQuery.trim() && !search.trim() && filter === "all" && page === 1;
@@ -525,6 +644,24 @@ function LogsPageContent() {
             pageSize: startupAccounts.length,
           }
         : undefined),
+  });
+
+  const { data: apiKeysResult } = useQuery({
+    queryKey: ["apikeys", "lookup"],
+    queryFn: () => accountClient.listApiKeys(),
+    enabled: areLogQueriesEnabled && isPageActive,
+    staleTime: 60_000,
+    retry: 1,
+    placeholderData: (previousData): ApiKey[] | undefined =>
+      previousData || (startupApiKeys.length > 0 ? startupApiKeys : undefined),
+  });
+
+  const { data: aggregateApisResult } = useQuery({
+    queryKey: ["aggregate-apis", "lookup"],
+    queryFn: () => accountClient.listAggregateApis(),
+    enabled: areLogQueriesEnabled && isPageActive,
+    staleTime: 60_000,
+    retry: 1,
   });
 
   const { data: logsResult, isLoading, isError: isLogsError } = useQuery({
@@ -591,6 +728,19 @@ function LogsPageContent() {
       ]),
     );
   }, [accountsResult?.items]);
+
+  const apiKeyMap = useMemo(() => {
+    return new Map((apiKeysResult || []).map((apiKey) => [apiKey.id, apiKey]));
+  }, [apiKeysResult]);
+
+  const aggregateApiMap = useMemo(() => {
+    return new Map(
+      (aggregateApisResult || []).map((aggregateApi) => [
+        aggregateApi.id,
+        aggregateApi,
+      ]),
+    );
+  }, [aggregateApisResult]);
 
   const logs = logsResult?.items || [];
   const isLogsLoading =
@@ -856,13 +1006,15 @@ function LogsPageContent() {
                           accountNameMap,
                         )}
                         accountNameMap={accountNameMap}
+                        apiKeyMap={apiKeyMap}
+                        aggregateApiMap={aggregateApiMap}
                       />
                     </TableCell>
                     <TableCell className="px-4 py-3 align-top">
                       <ModelEffortCell log={log} />
                     </TableCell>
                     <TableCell className="px-4 py-3 align-top">
-                      {getStatusBadge(log.statusCode)}
+                      {getStatusBadge(resolveDisplayedStatusCode(log))}
                     </TableCell>
                     <TableCell className="px-4 py-3 font-mono text-primary">
                       {formatDuration(log.durationMs)}

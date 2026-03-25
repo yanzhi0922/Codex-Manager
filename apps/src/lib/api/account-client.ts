@@ -91,6 +91,7 @@ interface ApiKeyPayload {
 interface AggregateApiPayload {
   providerType?: string | null;
   supplierName?: string | null;
+  sort?: number | null;
   url?: string | null;
   key?: string | null;
 }
@@ -293,6 +294,7 @@ export const accountClient = {
       withAddr({
         providerType: params.providerType || null,
         supplierName: params.supplierName || null,
+        sort: typeof params.sort === "number" ? params.sort : null,
         url: params.url || null,
         key: params.key || null,
       })
@@ -306,6 +308,7 @@ export const accountClient = {
         apiId,
         providerType: params.providerType || null,
         supplierName: params.supplierName || null,
+        sort: typeof params.sort === "number" ? params.sort : null,
         url: params.url || null,
         key: params.key || null,
       })

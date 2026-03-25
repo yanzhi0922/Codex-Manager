@@ -32,7 +32,14 @@ import {
 const DEFAULT_SERVICE_ADDR = "localhost:48760";
 const PRIMARY_PAGE_WARMUP_STALE_TIME = 30_000;
 const PRIMARY_PAGE_WARMUP_PAGE_SIZE = 20;
-const PRIMARY_PAGE_ROUTES = ["/", "/accounts/", "/apikeys/", "/logs/", "/settings/"] as const;
+const PRIMARY_PAGE_ROUTES = [
+  "/",
+  "/accounts/",
+  "/aggregate-api/",
+  "/apikeys/",
+  "/logs/",
+  "/settings/",
+] as const;
 const DEV_ROUTE_WARMUP_TIMEOUT_MS = 12_000;
 const STARTUP_WARMUP_LABEL = "[startup warmup]";
 const BOOTSTRAP_RECOVERY_RETRY_MS = 1_200;
@@ -149,6 +156,11 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
         queryClient.prefetchQuery({
           queryKey: ["apikeys"],
           queryFn: () => accountClient.listApiKeys(),
+          staleTime: PRIMARY_PAGE_WARMUP_STALE_TIME,
+        }),
+        queryClient.prefetchQuery({
+          queryKey: ["aggregate-apis"],
+          queryFn: () => accountClient.listAggregateApis(),
           staleTime: PRIMARY_PAGE_WARMUP_STALE_TIME,
         }),
         queryClient.prefetchQuery({

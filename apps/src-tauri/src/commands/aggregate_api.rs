@@ -12,12 +12,14 @@ pub async fn service_aggregate_api_create(
     addr: Option<String>,
     provider_type: Option<String>,
     supplier_name: Option<String>,
+    sort: Option<i64>,
     url: Option<String>,
     key: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let params = serde_json::json!({
         "providerType": provider_type,
         "supplierName": supplier_name,
+        "sort": sort,
         "url": url,
         "key": key,
     });
@@ -30,6 +32,7 @@ pub async fn service_aggregate_api_update(
     api_id: String,
     provider_type: Option<String>,
     supplier_name: Option<String>,
+    sort: Option<i64>,
     url: Option<String>,
     key: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -37,6 +40,7 @@ pub async fn service_aggregate_api_update(
         "id": api_id,
         "providerType": provider_type,
         "supplierName": supplier_name,
+        "sort": sort,
         "url": url,
         "key": key,
     });

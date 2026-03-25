@@ -105,6 +105,7 @@ export interface AggregateApi {
   id: string;
   providerType: string;
   supplierName: string | null;
+  sort: number;
   url: string;
   status: string;
   createdAt: number | null;

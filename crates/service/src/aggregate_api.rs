@@ -33,6 +33,10 @@ fn normalize_supplier_name(value: Option<String>) -> Result<String, String> {
     Ok(normalized)
 }
 
+fn normalize_sort(value: Option<i64>) -> i64 {
+    value.unwrap_or(0)
+}
+
 fn normalize_provider_type(value: Option<String>) -> Result<String, String> {
     match value {
         Some(raw) => {
@@ -226,7 +230,11 @@ pub(crate) fn resolve_aggregate_api_for_rotation(
             api.status == "active" && normalize_provider_type_value(api.provider_type.as_str()) == provider_type
         })
         .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    candidates.sort_by(|left, right| {
+        left.sort
+            .cmp(&right.sort)
+            .then(right.created_at.cmp(&left.created_at))
+    });
     candidates
         .into_iter()
         .next()
@@ -244,6 +252,7 @@ pub(crate) fn list_aggregate_apis() -> Result<Vec<AggregateApiSummary>, String> 
             id: item.id,
             provider_type: item.provider_type,
             supplier_name: item.supplier_name,
+            sort: item.sort,
             url: item.url,
             status: item.status,
             created_at: item.created_at,
@@ -260,10 +269,12 @@ pub(crate) fn create_aggregate_api(
     key: Option<String>,
     provider_type: Option<String>,
     supplier_name: Option<String>,
+    sort: Option<i64>,
 ) -> Result<AggregateApiCreateResult, String> {
     let storage = open_storage().ok_or_else(|| "storage unavailable".to_string())?;
     let normalized_provider_type = normalize_provider_type(provider_type)?;
     let normalized_supplier_name = normalize_supplier_name(supplier_name)?;
+    let normalized_sort = normalize_sort(sort);
     let normalized_url = normalize_upstream_base_url(url)?
         .unwrap_or_else(|| provider_default_url(normalized_provider_type.as_str()).to_string());
     let normalized_key = normalize_secret(key).ok_or_else(|| "key is required".to_string())?;
@@ -273,6 +284,7 @@ pub(crate) fn create_aggregate_api(
         id: id.clone(),
         provider_type: normalized_provider_type,
         supplier_name: Some(normalized_supplier_name),
+        sort: normalized_sort,
         url: normalized_url,
         status: "active".to_string(),
         created_at,
@@ -297,6 +309,7 @@ pub(crate) fn update_aggregate_api(
     key: Option<String>,
     provider_type: Option<String>,
     supplier_name: Option<String>,
+    sort: Option<i64>,
 ) -> Result<(), String> {
     if api_id.is_empty() {
         return Err("aggregate api id required".to_string());
@@ -312,6 +325,11 @@ pub(crate) fn update_aggregate_api(
     storage
         .update_aggregate_api_supplier_name(api_id, Some(normalized_supplier_name.as_str()))
         .map_err(|err| err.to_string())?;
+    if sort.is_some() {
+        storage
+            .update_aggregate_api_sort(api_id, normalize_sort(sort))
+            .map_err(|err| err.to_string())?;
+    }
     if let Some(url) = url {
         let normalized_url = normalize_upstream_base_url(Some(url))?
             .ok_or_else(|| "url is required".to_string())?;
