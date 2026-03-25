@@ -33,9 +33,9 @@ const AGGREGATE_API_PROVIDER_LABELS: Record<string, string> = {
   claude: "Claude",
 };
 
-const AGGREGATE_API_DEFAULT_URLS: Record<string, string> = {
-  codex: "https://api.openai.com/v1",
-  claude: "https://api.anthropic.com/v1",
+const AGGREGATE_API_URL_PLACEHOLDERS: Record<string, string> = {
+  codex: "例如：https://api.openai.com/v1",
+  claude: "例如：https://api.anthropic.com/v1",
 };
 
 interface AggregateApiModalProps {
@@ -72,7 +72,7 @@ export function AggregateApiModal({
     setProviderType(nextProviderType);
     setSupplierName(aggregateApi?.supplierName || "");
     setSortDraft(String(aggregateApi?.sort ?? defaultSort));
-    setUrl(aggregateApi?.url || AGGREGATE_API_DEFAULT_URLS[nextProviderType]);
+    setUrl(aggregateApi?.url || "");
     setKey("");
     setGeneratedKey("");
   }, [aggregateApi, defaultSort, open]);
@@ -221,7 +221,6 @@ export function AggregateApiModal({
               onValueChange={(value) => {
                 if (!value) return;
                 setProviderType(value);
-                setUrl(AGGREGATE_API_DEFAULT_URLS[value] || value);
               }}
             >
               <SelectTrigger id="aggregate-api-provider" className="w-full">
@@ -240,7 +239,7 @@ export function AggregateApiModal({
             <Label htmlFor="aggregate-api-url">URL</Label>
             <Input
               id="aggregate-api-url"
-              placeholder={AGGREGATE_API_DEFAULT_URLS[providerType] || "https://example.com"}
+              placeholder={AGGREGATE_API_URL_PLACEHOLDERS[providerType] || "请输入 URL"}
               value={url}
               disabled={!isServiceReady}
               onChange={(event) => setUrl(event.target.value)}

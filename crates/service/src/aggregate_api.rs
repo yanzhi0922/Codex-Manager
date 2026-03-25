@@ -91,6 +91,18 @@ fn read_first_chunk(mut response: reqwest::blocking::Response) -> Result<(), Str
     }
 }
 
+fn build_claude_probe_body() -> serde_json::Value {
+    json!({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 1,
+        "messages": [{
+            "role": "user",
+            "content": "Who are you?"
+        }],
+        "stream": true
+    })
+}
+
 fn build_codex_probe_body() -> serde_json::Value {
     json!({
         "model": "gpt-5.1-codex",
@@ -105,44 +117,70 @@ fn build_codex_probe_body() -> serde_json::Value {
     })
 }
 
-fn build_claude_probe_body() -> serde_json::Value {
-    json!({
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 1,
-        "messages": [{
-            "role": "user",
-            "content": "Who are you?"
-        }],
-        "stream": true
-    })
+fn append_client_version_query(url: &str) -> String {
+    if url.contains("client_version=") {
+        return url.to_string();
+    }
+    let separator = if url.contains('?') { '&' } else { '?' };
+    format!(
+        "{url}{separator}client_version={}",
+        gateway::current_codex_user_agent_version()
+    )
 }
 
 fn probe_codex_only_for_provider(provider_type: &str) -> bool {
     provider_type != AGGREGATE_API_PROVIDER_CLAUDE
 }
 
-fn probe_codex_endpoint(
-    client: &reqwest::blocking::Client,
-    base_url: &str,
+fn add_codex_probe_headers(
+    builder: reqwest::blocking::RequestBuilder,
     secret: &str,
-) -> Result<i64, String> {
-    let url = normalize_probe_url(base_url, "/responses");
-    let session_id = format!("cc-switch-stream-check-{}", now_ts());
+) -> Result<reqwest::blocking::RequestBuilder, String> {
     let auth_value = format!("Bearer {}", secret.trim());
-    let response = client
-        .post(url)
+    Ok(builder
         .header(
             HeaderName::from_static("authorization"),
             HeaderValue::from_str(auth_value.as_str())
                 .map_err(|_| "invalid aggregate api key".to_string())?,
         )
+        .header("x-api-key", secret.trim())
+        .header("api-key", secret.trim())
+        .header("accept", "application/json")
+        .header(
+            "user-agent",
+            gateway::current_codex_user_agent(),
+        )
+        .header("originator", gateway::current_wire_originator())
+        .header("accept-encoding", "identity"))
+}
+
+fn probe_codex_models_endpoint(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    secret: &str,
+) -> Result<i64, String> {
+    let url = append_client_version_query(&normalize_probe_url(base_url, "/models"));
+    let response = add_codex_probe_headers(client.get(url), secret)?
+        .send()
+        .map_err(|err| err.to_string())?;
+
+    let status_code = response.status().as_u16() as i64;
+    if !response.status().is_success() {
+        return Err(format!("codex models probe http_status={status_code}"));
+    }
+    read_first_chunk(response)?;
+    Ok(status_code)
+}
+
+fn probe_codex_responses_endpoint(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    secret: &str,
+) -> Result<i64, String> {
+    let url = normalize_probe_url(base_url, "/responses");
+    let response = add_codex_probe_headers(client.post(url), secret)?
         .header("content-type", "application/json")
         .header("accept", "text/event-stream")
-        .header("accept-encoding", "identity")
-        .header("user-agent", "codex_cli_rs/0.98.0 (Windows x86_64) Terminal")
-        .header("originator", "codex_cli_rs")
-        .header("session_id", session_id.clone())
-        .header("x-session-id", session_id)
         .json(&build_codex_probe_body())
         .send()
         .map_err(|err| err.to_string())?;
@@ -153,6 +191,28 @@ fn probe_codex_endpoint(
     }
     read_first_chunk(response)?;
     Ok(status_code)
+}
+
+fn probe_codex_endpoint(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    secret: &str,
+) -> Result<i64, String> {
+    let models_result = probe_codex_models_endpoint(client, base_url, secret);
+    if let Ok(code) = models_result {
+        return Ok(code);
+    }
+
+    let models_err = models_result.err().unwrap_or_else(|| "codex models probe failed".to_string());
+    let responses_result = probe_codex_responses_endpoint(client, base_url, secret);
+    if let Ok(code) = responses_result {
+        return Ok(code);
+    }
+
+    let responses_err = responses_result
+        .err()
+        .unwrap_or_else(|| "codex responses probe failed".to_string());
+    Err(format!("{models_err}; {responses_err}"))
 }
 
 fn probe_claude_endpoint(
