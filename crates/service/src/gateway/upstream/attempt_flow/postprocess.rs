@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use crate::account_status::mark_account_unavailable_for_refresh_token_error;
 
+use super::super::support::backoff;
 use super::super::support::outcome::{decide_upstream_outcome, UpstreamOutcomeDecision};
 use super::super::support::retry::{retry_with_alternate_path, AltPathRetryResult};
 use super::fallback_branch::{handle_openai_fallback_branch, FallbackBranchResult};
@@ -39,6 +40,68 @@ fn try_refresh_chatgpt_access_token(
         return Err("refreshed chatgpt access token is empty".to_string());
     }
     Ok(Some(refreshed.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn retry_upstream_server_error_once(
+    client: &reqwest::blocking::Client,
+    method: &reqwest::Method,
+    url: &str,
+    request_deadline: Option<Instant>,
+    request_ctx: UpstreamRequestContext<'_>,
+    incoming_headers: &super::super::super::IncomingHeaderSnapshot,
+    body: &Bytes,
+    is_stream: bool,
+    auth_token: &str,
+    account: &Account,
+    strip_session_affinity: bool,
+    debug: bool,
+    status: reqwest::StatusCode,
+) -> Result<Option<reqwest::blocking::Response>, ()> {
+    if !matches!(status.as_u16(), 500..=599) {
+        return Ok(None);
+    }
+    if debug {
+        log::warn!(
+            "event=gateway_upstream_server_error_retry path={} status={} account_id={}",
+            request_ctx.request_path,
+            status.as_u16(),
+            account.id
+        );
+    }
+    if !backoff::sleep_with_exponential_jitter(
+        std::time::Duration::from_millis(120),
+        std::time::Duration::from_millis(900),
+        1,
+        request_deadline,
+    ) {
+        return Err(());
+    }
+
+    match super::transport::send_upstream_request(
+        client,
+        method,
+        url,
+        request_deadline,
+        request_ctx,
+        incoming_headers,
+        body,
+        is_stream,
+        auth_token,
+        account,
+        strip_session_affinity,
+    ) {
+        Ok(resp) => Ok(Some(resp)),
+        Err(err) => {
+            log::warn!(
+                "event=gateway_upstream_server_error_retry_error path={} status=502 account_id={} err={}",
+                request_ctx.request_path,
+                account.id,
+                err
+            );
+            Ok(None)
+        }
+    }
 }
 
 pub(super) enum PostRetryFlowDecision {
@@ -180,6 +243,34 @@ where
         }
     }
 
+    match retry_upstream_server_error_once(
+        client,
+        method,
+        url,
+        request_deadline,
+        request_ctx,
+        incoming_headers,
+        body,
+        is_stream,
+        current_auth_token.as_str(),
+        account,
+        strip_session_affinity,
+        debug,
+        status,
+    ) {
+        Ok(Some(resp)) => {
+            upstream = resp;
+            status = upstream.status();
+        }
+        Ok(None) => {}
+        Err(()) => {
+            return PostRetryFlowDecision::Terminal {
+                status_code: 504,
+                message: "upstream total timeout exceeded".to_string(),
+            };
+        }
+    }
+
     match retry_stateless_then_optional_alt(
         client,
         method,
@@ -264,6 +355,132 @@ where
         UpstreamOutcomeDecision::Failover => PostRetryFlowDecision::Failover,
         UpstreamOutcomeDecision::RespondUpstream => {
             PostRetryFlowDecision::RespondUpstream(upstream)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codexmanager_core::storage::{now_ts, Account, Storage, Token};
+    use crate::gateway::IncomingHeaderSnapshot;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+    use tiny_http::{Response, Server, StatusCode};
+
+    fn build_account(id: &str, now: i64) -> Account {
+        Account {
+            id: id.to_string(),
+            label: id.to_string(),
+            issuer: "https://auth.openai.com".to_string(),
+            chatgpt_account_id: Some("chatgpt-account".to_string()),
+            workspace_id: Some("workspace-account".to_string()),
+            group_name: None,
+            sort: 0,
+            status: "active".to_string(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn build_token(account_id: &str, now: i64) -> Token {
+        Token {
+            account_id: account_id.to_string(),
+            id_token: "id-token".to_string(),
+            access_token: "access-token".to_string(),
+            refresh_token: String::new(),
+            api_key_access_token: Some("api-key-token".to_string()),
+            last_refresh: now,
+        }
+    }
+
+    #[test]
+    fn retries_server_error_once_before_final_decision() {
+        let storage = Storage::open_in_memory().expect("open storage");
+        storage.init().expect("init storage");
+        let now = now_ts();
+        let account = build_account("acc-500-retry", now);
+        let mut token = build_token(account.id.as_str(), now);
+        let auth_token = token.access_token.clone();
+        storage.insert_account(&account).expect("insert account");
+        storage.insert_token(&token).expect("insert token");
+
+        let server = Server::http("127.0.0.1:0").expect("start server");
+        let addr = format!("http://{}", server.server_addr());
+        let hit_count = Arc::new(AtomicUsize::new(0));
+        let hit_count_thread = Arc::clone(&hit_count);
+        let join = thread::spawn(move || {
+            for (index, status) in [500u16, 200u16].into_iter().enumerate() {
+                let mut request = server
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("receive upstream request")
+                    .expect("request present");
+                let mut body = Vec::new();
+                let _ = request
+                    .as_reader()
+                    .read_to_end(&mut body)
+                    .expect("read request body");
+                hit_count_thread.fetch_add(1, Ordering::SeqCst);
+                let response = Response::from_string(if index == 0 { "first" } else { "second" })
+                    .with_status_code(StatusCode(status));
+                request.respond(response).expect("respond");
+            }
+        });
+
+        let client = reqwest::blocking::Client::new();
+        let incoming_headers = IncomingHeaderSnapshot::default();
+        let request_ctx = UpstreamRequestContext {
+            request_path: "/v1/responses",
+        };
+        let body = Bytes::from_static(br#"{"model":"gpt-5.3-codex","input":"hello"}"#);
+        let upstream = super::super::transport::send_upstream_request(
+            &client,
+            &reqwest::Method::POST,
+            addr.as_str(),
+            None,
+            request_ctx,
+            &incoming_headers,
+            &body,
+            false,
+            auth_token.as_str(),
+            &account,
+            false,
+        )
+        .expect("send initial request");
+
+        let decision = process_upstream_post_retry_flow(
+            &client,
+            &storage,
+            &reqwest::Method::POST,
+            addr.as_str(),
+            "/v1/responses",
+            addr.as_str(),
+            None,
+            None,
+            request_ctx,
+            &incoming_headers,
+            &body,
+            false,
+            auth_token.as_str(),
+            &account,
+            &mut token,
+            None,
+            false,
+            false,
+            false,
+            false,
+            true,
+            upstream,
+            |_, _, _| {},
+        );
+
+        join.join().expect("join server");
+        assert_eq!(hit_count.load(Ordering::SeqCst), 2);
+        match decision {
+            PostRetryFlowDecision::RespondUpstream(resp) => assert_eq!(resp.status(), 200),
+            _ => panic!("unexpected decision"),
         }
     }
 }
