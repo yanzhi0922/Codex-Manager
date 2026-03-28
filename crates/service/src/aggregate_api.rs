@@ -1,6 +1,5 @@
 use codexmanager_core::rpc::types::{
-    AggregateApiCreateResult, AggregateApiSecretResult, AggregateApiSummary,
-    AggregateApiTestResult,
+    AggregateApiCreateResult, AggregateApiSecretResult, AggregateApiSummary, AggregateApiTestResult,
 };
 use codexmanager_core::storage::{now_ts, AggregateApi};
 use reqwest::header::{HeaderName, HeaderValue};
@@ -42,15 +41,15 @@ fn normalize_provider_type(value: Option<String>) -> Result<String, String> {
         Some(raw) => {
             let normalized = raw.trim().to_ascii_lowercase().replace('-', "_");
             match normalized.as_str() {
-            "codex" | "openai" | "openai_compat" | "gpt" => {
-                Ok(AGGREGATE_API_PROVIDER_CODEX.to_string())
+                "codex" | "openai" | "openai_compat" | "gpt" => {
+                    Ok(AGGREGATE_API_PROVIDER_CODEX.to_string())
+                }
+                "claude" | "anthropic" | "anthropic_native" | "claude_code" => {
+                    Ok(AGGREGATE_API_PROVIDER_CLAUDE.to_string())
+                }
+                other => Err(format!("unsupported aggregate api provider type: {other}")),
             }
-            "claude" | "anthropic" | "anthropic_native" | "claude_code" => {
-                Ok(AGGREGATE_API_PROVIDER_CLAUDE.to_string())
-            }
-            other => Err(format!("unsupported aggregate api provider type: {other}")),
-            }
-        },
+        }
         None => Ok(AGGREGATE_API_PROVIDER_CODEX.to_string()),
     }
 }
@@ -72,13 +71,102 @@ fn provider_default_url(provider_type: &str) -> &'static str {
     }
 }
 
-fn normalize_probe_url(base_url: &str, suffix: &str) -> String {
-    let base = base_url.trim().trim_end_matches('/');
-    if base.ends_with("/v1") {
-        format!("{base}{suffix}")
-    } else {
-        format!("{base}/v1{suffix}")
+pub(crate) fn build_aggregate_api_upstream_url(
+    base_url: &str,
+    request_path: &str,
+) -> Result<reqwest::Url, String> {
+    let mut url =
+        reqwest::Url::parse(base_url).map_err(|_| "invalid aggregate api url".to_string())?;
+    let preserved_query = url.query().map(str::to_string);
+    let trimmed_request_path = request_path.trim();
+    let (request_path_only, request_query) = match trimmed_request_path.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (trimmed_request_path, None),
+    };
+
+    let mut path_segments = url
+        .path_segments()
+        .map(|segments| {
+            segments
+                .filter(|segment| !segment.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut request_segments = request_path_only
+        .trim_start_matches('/')
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    if path_segments.last().map(String::as_str) == Some("v1")
+        && request_segments.first().map(String::as_str) == Some("v1")
+    {
+        request_segments.remove(0);
     }
+
+    if !request_segments.is_empty() {
+        path_segments.extend(request_segments);
+    }
+
+    if path_segments.is_empty() {
+        url.set_path("/");
+    } else {
+        url.set_path(format!("/{}", path_segments.join("/")).as_str());
+    }
+    url.set_query(match request_query {
+        Some(query) => Some(query),
+        None => preserved_query.as_deref(),
+    });
+    Ok(url)
+}
+
+pub(crate) fn build_aggregate_api_unversioned_fallback_url(
+    base_url: &str,
+    request_path: &str,
+) -> Result<Option<reqwest::Url>, String> {
+    let parsed =
+        reqwest::Url::parse(base_url).map_err(|_| "invalid aggregate api url".to_string())?;
+    let path_segments = parsed
+        .path_segments()
+        .map(|segments| {
+            segments
+                .filter(|segment| !segment.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if path_segments.is_empty() || path_segments.last().map(String::as_str) == Some("v1") {
+        return Ok(None);
+    }
+
+    let Some(fallback_request_path) =
+        build_aggregate_api_unversioned_fallback_request_path(request_path)
+    else {
+        return Ok(None);
+    };
+
+    let primary_url = build_aggregate_api_upstream_url(base_url, request_path)?;
+    let fallback_url = build_aggregate_api_upstream_url(base_url, fallback_request_path.as_str())?;
+    if fallback_url == primary_url {
+        Ok(None)
+    } else {
+        Ok(Some(fallback_url))
+    }
+}
+
+fn build_aggregate_api_unversioned_fallback_request_path(request_path: &str) -> Option<String> {
+    let trimmed_request_path = request_path.trim();
+    let (request_path_only, request_query) = match trimmed_request_path.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (trimmed_request_path, None),
+    };
+    let stripped_path = request_path_only.strip_prefix("/v1/")?;
+    Some(match request_query {
+        Some(query) => format!("/{stripped_path}?{query}"),
+        None => format!("/{stripped_path}"),
+    })
 }
 
 fn read_first_chunk(mut response: reqwest::blocking::Response) -> Result<(), String> {
@@ -104,6 +192,20 @@ fn build_claude_probe_body() -> serde_json::Value {
 }
 
 fn build_codex_probe_body() -> serde_json::Value {
+    json!({
+        "model": "gpt-5.1-codex",
+        "input": [{
+            "role": "user",
+            "content": [{
+                "type": "input_text",
+                "text": "Who are you?"
+            }]
+        }],
+        "stream": true
+    })
+}
+
+fn build_codex_legacy_probe_body() -> serde_json::Value {
     json!({
         "model": "gpt-5.1-codex",
         "input": [{
@@ -146,10 +248,7 @@ fn add_codex_probe_headers(
         .header("x-api-key", secret.trim())
         .header("api-key", secret.trim())
         .header("accept", "application/json")
-        .header(
-            "user-agent",
-            gateway::current_codex_user_agent(),
-        )
+        .header("user-agent", gateway::current_codex_user_agent())
         .header("originator", gateway::current_wire_originator())
         .header("accept-encoding", "identity"))
 }
@@ -159,7 +258,9 @@ fn probe_codex_models_endpoint(
     base_url: &str,
     secret: &str,
 ) -> Result<i64, String> {
-    let url = append_client_version_query(&normalize_probe_url(base_url, "/models"));
+    let url = append_client_version_query(
+        &build_aggregate_api_upstream_url(base_url, "/v1/models")?.to_string(),
+    );
     let response = add_codex_probe_headers(client.get(url), secret)?
         .send()
         .map_err(|err| err.to_string())?;
@@ -172,16 +273,18 @@ fn probe_codex_models_endpoint(
     Ok(status_code)
 }
 
-fn probe_codex_responses_endpoint(
+fn probe_codex_responses_endpoint_once(
     client: &reqwest::blocking::Client,
     base_url: &str,
     secret: &str,
+    request_path: &str,
+    body: &serde_json::Value,
 ) -> Result<i64, String> {
-    let url = normalize_probe_url(base_url, "/responses");
+    let url = build_aggregate_api_upstream_url(base_url, request_path)?;
     let response = add_codex_probe_headers(client.post(url), secret)?
         .header("content-type", "application/json")
         .header("accept", "text/event-stream")
-        .json(&build_codex_probe_body())
+        .json(body)
         .send()
         .map_err(|err| err.to_string())?;
 
@@ -191,6 +294,80 @@ fn probe_codex_responses_endpoint(
     }
     read_first_chunk(response)?;
     Ok(status_code)
+}
+
+fn probe_codex_responses_endpoint_with_body(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    secret: &str,
+    body: &serde_json::Value,
+) -> Result<i64, String> {
+    let primary_result =
+        probe_codex_responses_endpoint_once(client, base_url, secret, "/v1/responses", body);
+    if let Ok(code) = primary_result {
+        return Ok(code);
+    }
+
+    let primary_err = primary_result
+        .err()
+        .unwrap_or_else(|| "codex probe failed".to_string());
+    let Some(_fallback_url) =
+        build_aggregate_api_unversioned_fallback_url(base_url, "/v1/responses")?
+    else {
+        return Err(primary_err);
+    };
+    let fallback_request_path =
+        build_aggregate_api_unversioned_fallback_request_path("/v1/responses")
+            .ok_or_else(|| "codex fallback request path missing".to_string())?;
+    let fallback_result = probe_codex_responses_endpoint_once(
+        client,
+        base_url,
+        secret,
+        fallback_request_path.as_str(),
+        body,
+    );
+    if let Ok(code) = fallback_result {
+        return Ok(code);
+    }
+
+    let fallback_err = fallback_result
+        .err()
+        .unwrap_or_else(|| "codex fallback probe failed".to_string());
+    Err(format!("{primary_err}; {fallback_err}"))
+}
+
+fn probe_codex_responses_endpoint(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    secret: &str,
+) -> Result<i64, String> {
+    let primary_result = probe_codex_responses_endpoint_with_body(
+        client,
+        base_url,
+        secret,
+        &build_codex_probe_body(),
+    );
+    if let Ok(code) = primary_result {
+        return Ok(code);
+    }
+
+    let primary_err = primary_result
+        .err()
+        .unwrap_or_else(|| "codex probe failed".to_string());
+    let legacy_result = probe_codex_responses_endpoint_with_body(
+        client,
+        base_url,
+        secret,
+        &build_codex_legacy_probe_body(),
+    );
+    if let Ok(code) = legacy_result {
+        return Ok(code);
+    }
+
+    let legacy_err = legacy_result
+        .err()
+        .unwrap_or_else(|| "legacy codex probe failed".to_string());
+    Err(format!("{primary_err}; {legacy_err}"))
 }
 
 fn probe_codex_endpoint(
@@ -203,7 +380,9 @@ fn probe_codex_endpoint(
         return Ok(code);
     }
 
-    let models_err = models_result.err().unwrap_or_else(|| "codex models probe failed".to_string());
+    let models_err = models_result
+        .err()
+        .unwrap_or_else(|| "codex models probe failed".to_string());
     let responses_result = probe_codex_responses_endpoint(client, base_url, secret);
     if let Ok(code) = responses_result {
         return Ok(code);
@@ -220,7 +399,7 @@ fn probe_claude_endpoint(
     base_url: &str,
     secret: &str,
 ) -> Result<i64, String> {
-    let url = normalize_probe_url(base_url, "/messages?beta=true");
+    let url = build_aggregate_api_upstream_url(base_url, "/v1/messages?beta=true")?;
     let auth_value = format!("Bearer {}", secret.trim());
     let response = client
         .post(url)
@@ -311,7 +490,10 @@ pub(crate) fn create_aggregate_api(
         let _ = storage.delete_aggregate_api(&id);
         return Err(format!("persist aggregate api secret failed: {err}"));
     }
-    Ok(AggregateApiCreateResult { id, key: normalized_key })
+    Ok(AggregateApiCreateResult {
+        id,
+        key: normalized_key,
+    })
 }
 
 pub(crate) fn update_aggregate_api(
@@ -342,8 +524,8 @@ pub(crate) fn update_aggregate_api(
             .map_err(|err| err.to_string())?;
     }
     if let Some(url) = url {
-        let normalized_url = normalize_upstream_base_url(Some(url))?
-            .ok_or_else(|| "url is required".to_string())?;
+        let normalized_url =
+            normalize_upstream_base_url(Some(url))?.ok_or_else(|| "url is required".to_string())?;
         storage
             .update_aggregate_api(api_id, normalized_url.as_str())
             .map_err(|err| err.to_string())?;
@@ -410,16 +592,9 @@ pub(crate) fn test_aggregate_api_connection(
         Ok(code) => (true, Some(code), None),
         Err(err) => (false, None, Some(err)),
     };
-    let message = last_error.map(|err| {
-        format!("provider={provider_type}; {err}")
-    });
+    let message = last_error.map(|err| format!("provider={provider_type}; {err}"));
 
-    let _ = storage.update_aggregate_api_test_result(
-        api_id,
-        ok,
-        status_code,
-        message.as_deref(),
-    );
+    let _ = storage.update_aggregate_api_test_result(api_id, ok, status_code, message.as_deref());
     Ok(AggregateApiTestResult {
         id: api_id.to_string(),
         ok,
@@ -428,4 +603,74 @@ pub(crate) fn test_aggregate_api_connection(
         tested_at: now_ts(),
         latency_ms: started_at.elapsed().as_millis() as i64,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_aggregate_api_unversioned_fallback_url, build_aggregate_api_upstream_url,
+        build_codex_probe_body,
+    };
+
+    #[test]
+    fn aggregate_api_url_builder_preserves_openai_prefixes() {
+        let url = build_aggregate_api_upstream_url(
+            "http://127.0.0.1:3000/openai",
+            "/v1/responses?trace=1",
+        )
+        .expect("build aggregate api url");
+
+        assert_eq!(
+            url.as_str(),
+            "http://127.0.0.1:3000/openai/v1/responses?trace=1"
+        );
+    }
+
+    #[test]
+    fn aggregate_api_url_builder_deduplicates_v1_segment() {
+        let url = build_aggregate_api_upstream_url("https://api.openai.com/v1", "/v1/models")
+            .expect("build aggregate api url");
+
+        assert_eq!(url.as_str(), "https://api.openai.com/v1/models");
+    }
+
+    #[test]
+    fn aggregate_api_unversioned_fallback_strips_v1_after_custom_prefix() {
+        let url = build_aggregate_api_unversioned_fallback_url(
+            "https://fizzlycode.com/openai",
+            "/v1/responses?trace=1",
+        )
+        .expect("build aggregate api fallback url")
+        .expect("fallback url");
+
+        assert_eq!(
+            url.as_str(),
+            "https://fizzlycode.com/openai/responses?trace=1"
+        );
+    }
+
+    #[test]
+    fn aggregate_api_unversioned_fallback_skips_root_and_v1_bases() {
+        assert!(build_aggregate_api_unversioned_fallback_url(
+            "https://api.openai.com/v1",
+            "/v1/responses"
+        )
+        .expect("build fallback for versioned base")
+        .is_none());
+        assert!(build_aggregate_api_unversioned_fallback_url(
+            "https://api.openai.com",
+            "/v1/responses"
+        )
+        .expect("build fallback for root base")
+        .is_none());
+    }
+
+    #[test]
+    fn codex_probe_body_uses_input_text_parts() {
+        let body = build_codex_probe_body();
+        assert_eq!(
+            body["input"][0]["content"][0]["type"].as_str(),
+            Some("input_text")
+        );
+    }
 }

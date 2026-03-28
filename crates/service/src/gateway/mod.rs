@@ -29,8 +29,6 @@ mod request_entry;
 mod request_gate;
 #[path = "request/request_helpers.rs"]
 mod request_helpers;
-#[path = "request/session_affinity.rs"]
-mod session_affinity;
 #[path = "observability/request_log.rs"]
 mod request_log;
 #[path = "request/request_rewrite.rs"]
@@ -43,6 +41,8 @@ mod route_quality;
 mod runtime_config;
 #[path = "routing/selection.rs"]
 mod selection;
+#[path = "request/session_affinity.rs"]
+mod session_affinity;
 #[path = "auth/token_exchange.rs"]
 mod token_exchange;
 #[path = "observability/trace_log.rs"]
@@ -214,8 +214,8 @@ use request_gate::{request_gate_lock, RequestGateAcquireError};
 use request_log::write_request_log;
 use route_hint::apply_route_strategy;
 use route_quality::record_route_quality;
-pub(crate) use runtime_config::front_proxy_max_body_bytes;
 pub(crate) use runtime_config::fresh_upstream_client;
+pub(crate) use runtime_config::front_proxy_max_body_bytes;
 use runtime_config::{
     account_max_inflight_limit, fresh_upstream_client_for_account, request_gate_wait_timeout,
     trace_body_preview_max_bytes, upstream_client, upstream_client_for_account,

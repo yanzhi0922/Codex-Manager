@@ -4,7 +4,10 @@ use reqwest::header::{HeaderName, HeaderValue};
 use std::time::Instant;
 use tiny_http::Request;
 
-use crate::aggregate_api::{AGGREGATE_API_PROVIDER_CLAUDE, AGGREGATE_API_PROVIDER_CODEX};
+use crate::aggregate_api::{
+    build_aggregate_api_unversioned_fallback_url, build_aggregate_api_upstream_url,
+    AGGREGATE_API_PROVIDER_CLAUDE, AGGREGATE_API_PROVIDER_CODEX,
+};
 use crate::gateway::request_log::RequestLogUsage;
 
 const AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL: usize = 3;
@@ -75,23 +78,18 @@ fn aggregate_api_failure_message(
     auth_error: Option<&str>,
     identity_error_code: Option<&str>,
 ) -> String {
-    let mut parts = vec![
-        crate::gateway::summarize_upstream_error_hint_from_body(status_code, body)
-            .unwrap_or_else(|| format!("aggregate api upstream status={status_code}")),
-    ];
-    if let Some(request_id) = request_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    let mut parts =
+        vec![
+            crate::gateway::summarize_upstream_error_hint_from_body(status_code, body)
+                .unwrap_or_else(|| format!("aggregate api upstream status={status_code}")),
+        ];
+    if let Some(request_id) = request_id.map(str::trim).filter(|value| !value.is_empty()) {
         parts.push(format!("request_id={request_id}"));
     }
     if let Some(cf_ray) = cf_ray.map(str::trim).filter(|value| !value.is_empty()) {
         parts.push(format!("cf_ray={cf_ray}"));
     }
-    if let Some(auth_error) = auth_error
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    if let Some(auth_error) = auth_error.map(str::trim).filter(|value| !value.is_empty()) {
         parts.push(format!("auth_error={auth_error}"));
     }
     if let Some(identity_error_code) = identity_error_code
@@ -105,6 +103,26 @@ fn aggregate_api_failure_message(
     } else {
         format!("{} [{}]", parts.remove(0), parts.join(", "))
     }
+}
+
+fn should_retry_unversioned_aggregate_api_url(status_code: u16) -> bool {
+    matches!(status_code, 400 | 404)
+}
+
+fn aggregate_api_attempt_urls(
+    base_url: &str,
+    request_path: &str,
+) -> Result<Vec<reqwest::Url>, String> {
+    let primary_url = build_aggregate_api_upstream_url(base_url, request_path)?;
+    let mut urls = vec![primary_url.clone()];
+    if let Some(fallback_url) =
+        build_aggregate_api_unversioned_fallback_url(base_url, request_path)?
+    {
+        if fallback_url != primary_url {
+            urls.push(fallback_url);
+        }
+    }
+    Ok(urls)
 }
 
 fn build_aggregate_api_request(
@@ -182,7 +200,9 @@ pub(crate) fn resolve_aggregate_api_rotation_candidates(
     }
 
     if candidates.is_empty() {
-        Err(format!("aggregate api not found for provider {provider_type}"))
+        Err(format!(
+            "aggregate api not found for provider {provider_type}"
+        ))
     } else {
         Ok(candidates)
     }
@@ -248,7 +268,7 @@ pub(in super::super) fn proxy_aggregate_request(
         };
 
         let mut succeeded = false;
-        for attempt_idx in 0..=AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL {
+        'attempts: for attempt_idx in 0..=AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL {
             if super::super::support::deadline::is_expired(request_deadline) {
                 let message = "aggregate api request timeout".to_string();
                 let request = request
@@ -295,10 +315,8 @@ pub(in super::super) fn proxy_aggregate_request(
                 return Ok(());
             }
 
-            let url = match reqwest::Url::parse(candidate_url.as_str())
-                .and_then(|url| url.join(path))
-            {
-                Ok(url) => url,
+            let attempt_urls = match aggregate_api_attempt_urls(candidate_url.as_str(), path) {
+                Ok(urls) => urls,
                 Err(_) => {
                     last_attempt_url = Some(candidate_url.clone());
                     last_attempt_supplier_name = candidate_supplier_name.clone();
@@ -307,181 +325,196 @@ pub(in super::super) fn proxy_aggregate_request(
                     break;
                 }
             };
+            let total_attempt_urls = attempt_urls.len();
+            for (url_idx, url) in attempt_urls.into_iter().enumerate() {
+                let builder = build_aggregate_api_request(
+                    &client,
+                    request.as_ref().expect("request should still be available"),
+                    method,
+                    url.clone(),
+                    body,
+                    secret.as_str(),
+                    request_deadline,
+                    is_stream,
+                )?;
 
-            let builder = build_aggregate_api_request(
-                &client,
-                request.as_ref().expect("request should still be available"),
-                method,
-                url.clone(),
-                body,
-                secret.as_str(),
-                request_deadline,
-                is_stream,
-            )?;
+                let attempt_started_at = Instant::now();
+                let upstream = match builder.send() {
+                    Ok(resp) => {
+                        let duration_ms =
+                            super::super::super::duration_to_millis(attempt_started_at.elapsed());
+                        super::super::super::metrics::record_gateway_upstream_attempt(
+                            duration_ms,
+                            false,
+                        );
+                        resp
+                    }
+                    Err(err) => {
+                        let duration_ms =
+                            super::super::super::duration_to_millis(attempt_started_at.elapsed());
+                        super::super::super::metrics::record_gateway_upstream_attempt(
+                            duration_ms,
+                            true,
+                        );
+                        let message = format!("aggregate api upstream error: {err}");
+                        last_attempt_url = Some(url.as_str().to_string());
+                        last_attempt_supplier_name = candidate_supplier_name.clone();
+                        last_attempt_error = Some(message);
+                        last_failure_status = 502;
+                        if url_idx + 1 < total_attempt_urls {
+                            continue;
+                        }
+                        if attempt_idx < AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL {
+                            continue 'attempts;
+                        }
+                        break 'attempts;
+                    }
+                };
 
-            let attempt_started_at = Instant::now();
-            let upstream = match builder.send() {
-                Ok(resp) => {
-                    let duration_ms =
-                        super::super::super::duration_to_millis(attempt_started_at.elapsed());
-                    super::super::super::metrics::record_gateway_upstream_attempt(
-                        duration_ms,
-                        false,
+                if !upstream.status().is_success() {
+                    let status_code = upstream.status().as_u16();
+                    let upstream_request_id = first_upstream_header(
+                        upstream.headers(),
+                        &["x-request-id", "x-oai-request-id"],
                     );
-                    resp
-                }
-                Err(err) => {
-                    let duration_ms =
-                        super::super::super::duration_to_millis(attempt_started_at.elapsed());
-                    super::super::super::metrics::record_gateway_upstream_attempt(
-                        duration_ms,
-                        true,
+                    let upstream_cf_ray = first_upstream_header(upstream.headers(), &["cf-ray"]);
+                    let upstream_auth_error = first_upstream_header(
+                        upstream.headers(),
+                        &["x-openai-authorization-error"],
                     );
-                    let message = format!("aggregate api upstream error: {err}");
+                    let upstream_identity_error_code =
+                        crate::gateway::extract_identity_error_code_from_headers(
+                            upstream.headers(),
+                        );
+                    let upstream_body = upstream
+                        .bytes()
+                        .map_err(|err| format!("read upstream body failed: {err}"))?;
+                    let message = aggregate_api_failure_message(
+                        status_code,
+                        upstream_body.as_ref(),
+                        upstream_request_id.as_deref(),
+                        upstream_cf_ray.as_deref(),
+                        upstream_auth_error.as_deref(),
+                        upstream_identity_error_code.as_deref(),
+                    );
                     last_attempt_url = Some(url.as_str().to_string());
                     last_attempt_supplier_name = candidate_supplier_name.clone();
                     last_attempt_error = Some(message);
                     last_failure_status = 502;
-                    if attempt_idx < AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL {
+                    if url_idx + 1 < total_attempt_urls
+                        && should_retry_unversioned_aggregate_api_url(status_code)
+                    {
                         continue;
                     }
-                    break;
+                    if attempt_idx < AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL {
+                        continue 'attempts;
+                    }
+                    break 'attempts;
                 }
-            };
 
-            if !upstream.status().is_success() {
-                let status_code = upstream.status().as_u16();
-                let upstream_request_id = first_upstream_header(
-                    upstream.headers(),
-                    &["x-request-id", "x-oai-request-id"],
+                let inflight_guard = super::super::super::acquire_account_inflight(key_id);
+                let bridge = super::super::super::respond_with_upstream(
+                    request
+                        .take()
+                        .expect("request should be available before bridge"),
+                    upstream,
+                    inflight_guard,
+                    response_adapter,
+                    path,
+                    None,
+                    is_stream,
+                    Some(trace_id),
+                )?;
+                let bridge_output_text_len = bridge
+                    .usage
+                    .output_text
+                    .as_deref()
+                    .map(str::trim)
+                    .map(str::len)
+                    .unwrap_or(0);
+                super::super::super::trace_log::log_bridge_result(
+                    trace_id,
+                    format!("{response_adapter:?}").as_str(),
+                    path,
+                    is_stream,
+                    bridge.stream_terminal_seen,
+                    bridge.stream_terminal_error.as_deref(),
+                    bridge.delivery_error.as_deref(),
+                    bridge_output_text_len,
+                    bridge.usage.output_tokens,
+                    bridge.delivered_status_code,
+                    bridge.upstream_error_hint.as_deref(),
+                    bridge.upstream_request_id.as_deref(),
+                    bridge.upstream_cf_ray.as_deref(),
+                    bridge.upstream_auth_error.as_deref(),
+                    bridge.upstream_identity_error_code.as_deref(),
+                    bridge.upstream_content_type.as_deref(),
+                    bridge.last_sse_event_type.as_deref(),
                 );
-                let upstream_cf_ray = first_upstream_header(upstream.headers(), &["cf-ray"]);
-                let upstream_auth_error =
-                    first_upstream_header(upstream.headers(), &["x-openai-authorization-error"]);
-                let upstream_identity_error_code =
-                    crate::gateway::extract_identity_error_code_from_headers(upstream.headers());
-                let upstream_body = upstream
-                    .bytes()
-                    .map_err(|err| format!("read upstream body failed: {err}"))?;
-                let message = aggregate_api_failure_message(
+                let bridge_ok = bridge.is_ok(is_stream);
+                let mut final_error = bridge.upstream_error_hint.clone();
+                if final_error.is_none() && !bridge_ok {
+                    final_error = Some(bridge.error_message(is_stream).unwrap_or_else(|| {
+                        "aggregate api upstream response incomplete".to_string()
+                    }));
+                }
+                let status_code =
+                    bridge
+                        .delivered_status_code
+                        .unwrap_or_else(|| if bridge_ok { 200 } else { 502 });
+                let status_code = if final_error.is_some() && status_code < 400 {
+                    502
+                } else {
+                    status_code
+                };
+                let usage = bridge.usage;
+
+                super::super::super::record_gateway_request_outcome(
+                    path,
                     status_code,
-                    upstream_body.as_ref(),
-                    upstream_request_id.as_deref(),
-                    upstream_cf_ray.as_deref(),
-                    upstream_auth_error.as_deref(),
-                    upstream_identity_error_code.as_deref(),
+                    Some("aggregate_api"),
                 );
-                last_attempt_url = Some(url.as_str().to_string());
-                last_attempt_supplier_name = candidate_supplier_name.clone();
-                last_attempt_error = Some(message);
-                last_failure_status = 502;
-                if attempt_idx < AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL {
-                    continue;
-                }
-                break;
+                super::super::super::trace_log::log_request_final(
+                    trace_id,
+                    status_code,
+                    Some(key_id),
+                    Some(url.as_str()),
+                    final_error.as_deref(),
+                    started_at.elapsed().as_millis(),
+                );
+                super::super::super::write_request_log(
+                    storage,
+                    super::super::super::request_log::RequestLogTraceContext {
+                        trace_id: Some(trace_id),
+                        original_path: Some(original_path),
+                        adapted_path: Some(path),
+                        response_adapter: Some(response_adapter),
+                        aggregate_api_supplier_name: candidate_supplier_name.as_deref(),
+                        aggregate_api_url: Some(candidate_url.as_str()),
+                        attempted_aggregate_api_ids: Some(attempted_aggregate_api_ids.as_slice()),
+                        ..Default::default()
+                    },
+                    Some(key_id),
+                    None,
+                    path,
+                    request_method,
+                    model_for_log,
+                    reasoning_for_log,
+                    Some(url.as_str()),
+                    Some(status_code),
+                    RequestLogUsage {
+                        input_tokens: usage.input_tokens,
+                        cached_input_tokens: usage.cached_input_tokens,
+                        output_tokens: usage.output_tokens,
+                        total_tokens: usage.total_tokens,
+                        reasoning_output_tokens: usage.reasoning_output_tokens,
+                    },
+                    final_error.as_deref(),
+                    Some(started_at.elapsed().as_millis()),
+                );
+                succeeded = true;
+                break 'attempts;
             }
-
-            let inflight_guard = super::super::super::acquire_account_inflight(key_id);
-            let bridge = super::super::super::respond_with_upstream(
-                request
-                    .take()
-                    .expect("request should be available before bridge"),
-                upstream,
-                inflight_guard,
-                response_adapter,
-                path,
-                None,
-                is_stream,
-                Some(trace_id),
-            )?;
-            let bridge_output_text_len = bridge
-                .usage
-                .output_text
-                .as_deref()
-                .map(str::trim)
-                .map(str::len)
-                .unwrap_or(0);
-            super::super::super::trace_log::log_bridge_result(
-                trace_id,
-                format!("{response_adapter:?}").as_str(),
-                path,
-                is_stream,
-                bridge.stream_terminal_seen,
-                bridge.stream_terminal_error.as_deref(),
-                bridge.delivery_error.as_deref(),
-                bridge_output_text_len,
-                bridge.usage.output_tokens,
-                bridge.delivered_status_code,
-                bridge.upstream_error_hint.as_deref(),
-                bridge.upstream_request_id.as_deref(),
-                bridge.upstream_cf_ray.as_deref(),
-                bridge.upstream_auth_error.as_deref(),
-                bridge.upstream_identity_error_code.as_deref(),
-                bridge.upstream_content_type.as_deref(),
-                bridge.last_sse_event_type.as_deref(),
-            );
-            let bridge_ok = bridge.is_ok(is_stream);
-            let mut final_error = bridge.upstream_error_hint.clone();
-            if final_error.is_none() && !bridge_ok {
-                final_error = Some(bridge.error_message(is_stream).unwrap_or_else(|| {
-                    "aggregate api upstream response incomplete".to_string()
-                }));
-            }
-            let status_code = bridge
-                .delivered_status_code
-                .unwrap_or_else(|| if bridge_ok { 200 } else { 502 });
-            let status_code = if final_error.is_some() && status_code < 400 {
-                502
-            } else {
-                status_code
-            };
-            let usage = bridge.usage;
-
-            super::super::super::record_gateway_request_outcome(
-                path,
-                status_code,
-                Some("aggregate_api"),
-            );
-            super::super::super::trace_log::log_request_final(
-                trace_id,
-                status_code,
-                Some(key_id),
-                Some(url.as_str()),
-                final_error.as_deref(),
-                started_at.elapsed().as_millis(),
-            );
-            super::super::super::write_request_log(
-                storage,
-                super::super::super::request_log::RequestLogTraceContext {
-                    trace_id: Some(trace_id),
-                    original_path: Some(original_path),
-                    adapted_path: Some(path),
-                    response_adapter: Some(response_adapter),
-                    aggregate_api_supplier_name: candidate_supplier_name.as_deref(),
-                    aggregate_api_url: Some(candidate_url.as_str()),
-                    attempted_aggregate_api_ids: Some(attempted_aggregate_api_ids.as_slice()),
-                    ..Default::default()
-                },
-                Some(key_id),
-                None,
-                path,
-                request_method,
-                model_for_log,
-                reasoning_for_log,
-                Some(url.as_str()),
-                Some(status_code),
-                RequestLogUsage {
-                    input_tokens: usage.input_tokens,
-                    cached_input_tokens: usage.cached_input_tokens,
-                    output_tokens: usage.output_tokens,
-                    total_tokens: usage.total_tokens,
-                    reasoning_output_tokens: usage.reasoning_output_tokens,
-                },
-                final_error.as_deref(),
-                Some(started_at.elapsed().as_millis()),
-            );
-            succeeded = true;
-            break;
         }
 
         if succeeded {
@@ -493,8 +526,8 @@ pub(in super::super) fn proxy_aggregate_request(
         }
     }
 
-    let message = last_attempt_error
-        .unwrap_or_else(|| "aggregate api upstream response failed".to_string());
+    let message =
+        last_attempt_error.unwrap_or_else(|| "aggregate api upstream response failed".to_string());
     let status_code = last_failure_status;
     let request = request
         .take()
@@ -538,6 +571,8 @@ pub(in super::super) fn proxy_aggregate_request(
 
 #[cfg(test)]
 mod tests {
+    use super::{aggregate_api_attempt_urls, should_retry_unversioned_aggregate_api_url};
+
     #[test]
     fn final_error_promotes_success_status_to_bad_gateway() {
         let status_code = bridge_status_code(Some(200), true, Some("unsupported model"));
@@ -556,12 +591,40 @@ mod tests {
         assert_eq!(status_code, 502);
     }
 
+    #[test]
+    fn aggregate_api_attempt_urls_adds_unversioned_fallback_for_prefixed_openai_urls() {
+        let urls =
+            aggregate_api_attempt_urls("https://fizzlycode.com/openai", "/v1/responses?trace=1")
+                .expect("attempt urls");
+
+        let actual = urls
+            .into_iter()
+            .map(|url| url.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            vec![
+                "https://fizzlycode.com/openai/v1/responses?trace=1".to_string(),
+                "https://fizzlycode.com/openai/responses?trace=1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn unversioned_fallback_retry_is_limited_to_path_mismatch_statuses() {
+        assert!(should_retry_unversioned_aggregate_api_url(400));
+        assert!(should_retry_unversioned_aggregate_api_url(404));
+        assert!(!should_retry_unversioned_aggregate_api_url(401));
+        assert!(!should_retry_unversioned_aggregate_api_url(429));
+    }
+
     fn bridge_status_code(
         delivered_status_code: Option<u16>,
         bridge_ok: bool,
         final_error: Option<&str>,
     ) -> u16 {
-        let status_code = delivered_status_code.unwrap_or_else(|| if bridge_ok { 200 } else { 502 });
+        let status_code =
+            delivered_status_code.unwrap_or_else(|| if bridge_ok { 200 } else { 502 });
         if final_error.is_some() && status_code < 400 {
             502
         } else {
