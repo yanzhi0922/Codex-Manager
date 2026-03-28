@@ -44,16 +44,17 @@ A local desktop + service toolkit for managing Codex-compatible accounts, usage,
 | Build locally, package, publish, run scripts | [Build, release, and script guide](docs/release/20260310122606851_构建发布与脚本说明.md) |
 
 ## Recent Changes
-- Current latest version: `v0.1.13` (2026-03-25)
+- Current latest version: `v0.1.14` (2026-03-28)
+- The Aggregate API page now has its own dashboard that only counts Aggregate API traffic, including total requests, success/error split, token usage, cache hits, and today's estimated cost.
 - Added an “Aggregate API” management page: manage multiple third-party relay providers as minimal upstreams, with `Codex / Claude` categorization, supplier name, sort order, URL, key, and connection testing.
 - Platform-key rotation now supports `Account Rotation` and `Aggregate API Rotation`; Aggregate API rotation prefers the configured provider order first, then forwards upstream requests by protocol while keeping account rotation unchanged.
-- `v0.1.13` continues the desktop and docs cleanup from this round: Aggregate API management and platform-key rotation are now wired through end to end, and desktop startup / tab switching is more stable. The README also reflects the latest feature set.
+- `v0.1.14` adds a dedicated Aggregate API statistics view: the official-account dashboard stays unchanged, while the Aggregate API page now exposes aggregate-only usage and cost metrics for third-party relay troubleshooting.
 - Account management adds the most practical governance features from this round: `account_deactivated` and `workspace_deactivated` are now recognized as unavailable signals, the list supports a dedicated `Banned` filter, and the actions menu can clean banned accounts in one click.
 - The 5-hour and 7-day quota columns now show reset timestamps under each progress bar. Free accounts that only expose a 7-day window also render the reset time under the 7-day column instead of the wrong bucket.
 - Platform keys now support service tier overrides with `Follow Request`, `Fast`, and `Flex`. `Fast` maps to upstream `priority`, while `Flex` is forwarded as `flex`; the desktop create/edit flow now saves and round-trips these values correctly.
 - The Settings page restores the service listen-mode switch so you can choose between `localhost` and `0.0.0.0`; the `Check for Updates` button now shows loading only for manual checks.
 - Web and desktop interaction bugs were also cleaned up: refreshing non-home Web routes no longer downloads the wrong file, and clipboard actions now degrade gracefully when `navigator.clipboard.writeText` is unavailable.
-- The release path stays unified: the product version is now `0.1.13`, and the workspace, frontend package, Tauri desktop app, release-version checks, and README version notes are all kept in sync. See [CHANGELOG.md](CHANGELOG.md) for the full history.
+- The release path stays unified: the product version is now `0.1.14`, and the workspace, frontend package, Tauri desktop app, release-version checks, and README version notes are all kept in sync. See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ### Recent Commit Highlights
 - `cb990a1`: refine account cleanup entry points and tighten the docs surface. The accounts menu now exposes banned cleanup and count display, while README/docs navigation is trimmed to the current mainline path.

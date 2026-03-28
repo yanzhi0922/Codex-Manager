@@ -333,3 +333,106 @@ fn request_logs_filtered_summary_aggregates_counts_and_tokens() {
     assert_eq!(summary.error_count, 1);
     assert_eq!(summary.total_tokens, 150);
 }
+
+#[test]
+fn request_logs_scoped_summary_and_today_summary_can_limit_to_aggregate_requests() {
+    let storage = Storage::open_in_memory().expect("open");
+    storage.init().expect("init");
+
+    let aggregate_log_id = storage
+        .insert_request_log(&RequestLog {
+            trace_id: Some("trc-aggregate".to_string()),
+            key_id: Some("gk-aggregate".to_string()),
+            account_id: Some("acc-aggregate".to_string()),
+            initial_account_id: Some("acc-aggregate".to_string()),
+            attempted_account_ids_json: Some(r#"["acc-aggregate"]"#.to_string()),
+            initial_aggregate_api_id: Some("agg-1".to_string()),
+            attempted_aggregate_api_ids_json: Some(r#"["agg-1"]"#.to_string()),
+            request_path: "/v1/responses".to_string(),
+            original_path: Some("/v1/responses".to_string()),
+            adapted_path: Some("/v1/responses".to_string()),
+            method: "POST".to_string(),
+            model: Some("gpt-5".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            response_adapter: Some("Passthrough".to_string()),
+            upstream_url: Some("https://gateway.example.com/openai/responses".to_string()),
+            aggregate_api_supplier_name: Some("CRS".to_string()),
+            aggregate_api_url: Some("https://gateway.example.com/openai".to_string()),
+            status_code: Some(200),
+            duration_ms: Some(800),
+            error: None,
+            created_at: 10_000,
+            ..Default::default()
+        })
+        .expect("insert aggregate request log");
+    storage
+        .insert_request_token_stat(&RequestTokenStat {
+            request_log_id: aggregate_log_id,
+            key_id: Some("gk-aggregate".to_string()),
+            account_id: Some("acc-aggregate".to_string()),
+            model: Some("gpt-5".to_string()),
+            input_tokens: Some(50),
+            cached_input_tokens: Some(10),
+            output_tokens: Some(30),
+            total_tokens: Some(80),
+            reasoning_output_tokens: Some(12),
+            estimated_cost_usd: Some(0.42),
+            created_at: 10_000,
+        })
+        .expect("insert aggregate token stat");
+
+    let direct_log_id = storage
+        .insert_request_log(&RequestLog {
+            trace_id: Some("trc-direct".to_string()),
+            key_id: Some("gk-direct".to_string()),
+            account_id: Some("acc-direct".to_string()),
+            initial_account_id: Some("acc-direct".to_string()),
+            attempted_account_ids_json: Some(r#"["acc-direct"]"#.to_string()),
+            request_path: "/v1/responses".to_string(),
+            original_path: Some("/v1/responses".to_string()),
+            adapted_path: Some("/v1/responses".to_string()),
+            method: "POST".to_string(),
+            model: Some("gpt-5".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            response_adapter: Some("Passthrough".to_string()),
+            upstream_url: Some("https://api.openai.com/v1/responses".to_string()),
+            status_code: Some(502),
+            duration_ms: Some(900),
+            error: Some("upstream error".to_string()),
+            created_at: 10_001,
+            ..Default::default()
+        })
+        .expect("insert direct request log");
+    storage
+        .insert_request_token_stat(&RequestTokenStat {
+            request_log_id: direct_log_id,
+            key_id: Some("gk-direct".to_string()),
+            account_id: Some("acc-direct".to_string()),
+            model: Some("gpt-5".to_string()),
+            input_tokens: Some(20),
+            cached_input_tokens: Some(0),
+            output_tokens: Some(10),
+            total_tokens: Some(30),
+            reasoning_output_tokens: Some(4),
+            estimated_cost_usd: Some(0.15),
+            created_at: 10_001,
+        })
+        .expect("insert direct token stat");
+
+    let scoped_summary = storage
+        .summarize_request_logs_filtered_scoped(None, Some("all"), true)
+        .expect("summarize aggregate-only logs");
+    assert_eq!(scoped_summary.count, 1);
+    assert_eq!(scoped_summary.success_count, 1);
+    assert_eq!(scoped_summary.error_count, 0);
+    assert_eq!(scoped_summary.total_tokens, 80);
+
+    let today_summary = storage
+        .summarize_request_logs_between_scoped(9_000, 11_000, true)
+        .expect("summarize aggregate-only today");
+    assert_eq!(today_summary.input_tokens, 50);
+    assert_eq!(today_summary.cached_input_tokens, 10);
+    assert_eq!(today_summary.output_tokens, 30);
+    assert_eq!(today_summary.reasoning_output_tokens, 12);
+    assert_eq!(today_summary.estimated_cost_usd, 0.42);
+}

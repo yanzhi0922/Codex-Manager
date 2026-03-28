@@ -35,6 +35,12 @@ impl Storage {
             "CREATE INDEX IF NOT EXISTS idx_request_logs_trace_id_created_at ON request_logs(trace_id, created_at DESC)",
             [],
         )?;
+        if self.has_column("request_logs", "initial_aggregate_api_id")? {
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_request_logs_initial_aggregate_api_id_created_at ON request_logs(initial_aggregate_api_id, created_at DESC)",
+                [],
+            )?;
+        }
         Ok(())
     }
 
@@ -144,16 +150,17 @@ impl Storage {
         self.list_request_logs_paginated(query, None, 0, limit)
     }
 
-    pub fn list_request_logs_paginated(
+    pub fn list_request_logs_paginated_scoped(
         &self,
         query: Option<&str>,
         status_filter: Option<&str>,
         offset: i64,
         limit: i64,
+        aggregate_only: bool,
     ) -> Result<Vec<RequestLog>> {
         let normalized_limit = normalize_request_log_limit(limit);
         let normalized_offset = offset.max(0);
-        let filters = build_request_log_filters(query, status_filter);
+        let filters = build_request_log_filters(query, status_filter, aggregate_only);
         let sql = format!(
             "SELECT
                 r.trace_id, r.key_id, r.account_id, r.initial_account_id, r.attempted_account_ids_json, r.initial_aggregate_api_id, r.attempted_aggregate_api_ids_json,
@@ -181,12 +188,23 @@ impl Storage {
         Ok(out)
     }
 
-    pub fn count_request_logs(
+    pub fn list_request_logs_paginated(
         &self,
         query: Option<&str>,
         status_filter: Option<&str>,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<RequestLog>> {
+        self.list_request_logs_paginated_scoped(query, status_filter, offset, limit, false)
+    }
+
+    pub fn count_request_logs_scoped(
+        &self,
+        query: Option<&str>,
+        status_filter: Option<&str>,
+        aggregate_only: bool,
     ) -> Result<i64> {
-        let filters = build_request_log_filters(query, status_filter);
+        let filters = build_request_log_filters(query, status_filter, aggregate_only);
         let sql = format!(
             "SELECT COUNT(1)
              FROM request_logs r
@@ -200,12 +218,21 @@ impl Storage {
             })
     }
 
-    pub fn summarize_request_logs_filtered(
+    pub fn count_request_logs(
         &self,
         query: Option<&str>,
         status_filter: Option<&str>,
+    ) -> Result<i64> {
+        self.count_request_logs_scoped(query, status_filter, false)
+    }
+
+    pub fn summarize_request_logs_filtered_scoped(
+        &self,
+        query: Option<&str>,
+        status_filter: Option<&str>,
+        aggregate_only: bool,
     ) -> Result<RequestLogQuerySummary> {
-        let filters = build_request_log_filters(query, status_filter);
+        let filters = build_request_log_filters(query, status_filter, aggregate_only);
         let sql = format!(
             "SELECT
                 COUNT(1),
@@ -239,6 +266,14 @@ impl Storage {
             })
     }
 
+    pub fn summarize_request_logs_filtered(
+        &self,
+        query: Option<&str>,
+        status_filter: Option<&str>,
+    ) -> Result<RequestLogQuerySummary> {
+        self.summarize_request_logs_filtered_scoped(query, status_filter, false)
+    }
+
     pub fn clear_request_logs(&self) -> Result<()> {
         // 只清理请求明细日志，保留 token 统计用于仪表盘历史用量与费用汇总。
         self.conn.execute("DELETE FROM request_logs", [])?;
@@ -250,7 +285,50 @@ impl Storage {
         start_ts: i64,
         end_ts: i64,
     ) -> Result<RequestLogTodaySummary> {
-        self.summarize_request_token_stats_between(start_ts, end_ts)
+        self.summarize_request_logs_between_scoped(start_ts, end_ts, false)
+    }
+
+    pub fn summarize_request_logs_between_scoped(
+        &self,
+        start_ts: i64,
+        end_ts: i64,
+        aggregate_only: bool,
+    ) -> Result<RequestLogTodaySummary> {
+        if !aggregate_only {
+            return self.summarize_request_token_stats_between(start_ts, end_ts);
+        }
+
+        let sql = format!(
+            "SELECT
+                IFNULL(SUM(t.input_tokens), 0),
+                IFNULL(SUM(t.cached_input_tokens), 0),
+                IFNULL(SUM(t.output_tokens), 0),
+                IFNULL(SUM(t.reasoning_output_tokens), 0),
+                IFNULL(SUM(t.estimated_cost_usd), 0.0)
+             FROM request_logs r
+             LEFT JOIN request_token_stats t ON t.request_log_id = r.id
+             WHERE r.created_at >= ?1 AND r.created_at < ?2
+               AND ({aggregate_only_clause})",
+            aggregate_only_clause = aggregate_only_sql_clause()
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query((start_ts, end_ts))?;
+        if let Some(row) = rows.next()? {
+            return Ok(RequestLogTodaySummary {
+                input_tokens: row.get(0)?,
+                cached_input_tokens: row.get(1)?,
+                output_tokens: row.get(2)?,
+                reasoning_output_tokens: row.get(3)?,
+                estimated_cost_usd: row.get(4)?,
+            });
+        }
+        Ok(RequestLogTodaySummary {
+            input_tokens: 0,
+            cached_input_tokens: 0,
+            output_tokens: 0,
+            reasoning_output_tokens: 0,
+            estimated_cost_usd: 0.0,
+        })
     }
 
     pub(super) fn ensure_request_logs_table(&self) -> Result<()> {
@@ -334,6 +412,10 @@ impl Storage {
     pub(super) fn ensure_request_log_aggregate_api_attempt_chain_columns(&self) -> Result<()> {
         self.ensure_column("request_logs", "initial_aggregate_api_id", "TEXT")?;
         self.ensure_column("request_logs", "attempted_aggregate_api_ids_json", "TEXT")?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_logs_initial_aggregate_api_id_created_at ON request_logs(initial_aggregate_api_id, created_at DESC)",
+            [],
+        )?;
         Ok(())
     }
 
@@ -459,6 +541,7 @@ fn normalize_request_log_limit(value: i64) -> i64 {
 fn build_request_log_filters(
     query: Option<&str>,
     status_filter: Option<&str>,
+    aggregate_only: bool,
 ) -> RequestLogSqlFilters {
     let mut clauses = Vec::new();
     let mut params = Vec::new();
@@ -469,6 +552,7 @@ fn build_request_log_filters(
         &mut params,
     );
     append_status_filter_clause(status_filter, &mut clauses, &mut params);
+    append_aggregate_only_clause(aggregate_only, &mut clauses);
 
     RequestLogSqlFilters {
         where_clause: if clauses.is_empty() {
@@ -478,6 +562,13 @@ fn build_request_log_filters(
         },
         params,
     }
+}
+
+fn aggregate_only_sql_clause() -> &'static str {
+    "TRIM(IFNULL(r.initial_aggregate_api_id, '')) <> ''
+        OR TRIM(IFNULL(r.aggregate_api_supplier_name, '')) <> ''
+        OR TRIM(IFNULL(r.aggregate_api_url, '')) <> ''
+        OR TRIM(IFNULL(r.attempted_aggregate_api_ids_json, '')) <> ''"
 }
 
 fn append_request_log_query_clause(
@@ -567,6 +658,13 @@ fn append_status_filter_clause(
         }
         _ => {}
     }
+}
+
+fn append_aggregate_only_clause(aggregate_only: bool, clauses: &mut Vec<String>) {
+    if !aggregate_only {
+        return;
+    }
+    clauses.push(format!("({})", aggregate_only_sql_clause()));
 }
 
 #[cfg(test)]

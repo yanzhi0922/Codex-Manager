@@ -92,10 +92,12 @@ export const serviceClient = {
   async getRequestLogSummary(params?: {
     query?: string;
     statusFilter?: string;
+    aggregateOnly?: boolean;
   }): Promise<RequestLogFilterSummary> {
     const result = await invoke<unknown>(
       "service_requestlog_summary",
       withAddr({
+        aggregateOnly: params?.aggregateOnly ?? false,
         query: params?.query || "",
         statusFilter: params?.statusFilter || "all",
       })
@@ -103,10 +105,14 @@ export const serviceClient = {
     return normalizeRequestLogFilterSummary(result);
   },
   clearRequestLogs: () => invoke("service_requestlog_clear", withAddr()),
-  async getTodaySummary(): Promise<RequestLogTodaySummary> {
+  async getTodaySummary(params?: {
+    aggregateOnly?: boolean;
+  }): Promise<RequestLogTodaySummary> {
     const result = await invoke<unknown>(
       "service_requestlog_today_summary",
-      withAddr()
+      withAddr({
+        aggregateOnly: params?.aggregateOnly ?? false,
+      })
     );
     return normalizeTodaySummary(result);
   },

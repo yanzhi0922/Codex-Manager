@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
+  AlertTriangle,
   ArrowUp,
+  CheckCircle2,
   Copy,
+  Database,
+  DollarSign,
   Eye,
   EyeOff,
   MoreVertical,
@@ -13,13 +18,14 @@ import {
   Settings2,
   ShieldCheck,
   Trash2,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AggregateApiModal } from "@/components/modals/aggregate-api-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -49,8 +55,9 @@ import {
 } from "@/components/ui/tooltip";
 import { accountClient } from "@/lib/api/account-client";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
-import { formatTsFromSeconds } from "@/lib/utils/usage";
+import { formatCompactNumber, formatTsFromSeconds } from "@/lib/utils/usage";
 import { useAppStore } from "@/lib/store/useAppStore";
+import { useAggregateApiStats } from "@/hooks/useAggregateApiStats";
 import { useDesktopPageActive } from "@/hooks/useDesktopPageActive";
 import { useDeferredDesktopActivation } from "@/hooks/useDeferredDesktopActivation";
 import { usePageTransitionReady } from "@/hooks/usePageTransitionReady";
@@ -86,6 +93,41 @@ function getTestBadge(api: AggregateApi) {
   return <Badge variant="secondary">未测试</Badge>;
 }
 
+function AggregateMetricCard({
+  title,
+  value,
+  description,
+  icon: Icon,
+  toneClass,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  icon: LucideIcon;
+  toneClass: string;
+}) {
+  return (
+    <Card className="glass-card border-none shadow-sm backdrop-blur-md transition-all hover:-translate-y-0.5">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5">
+        <CardTitle className="text-[13px] font-medium text-muted-foreground">
+          {title}
+        </CardTitle>
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-xl ${toneClass}`}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-0.5">
+        <div className="text-[2rem] leading-none font-semibold tracking-tight">
+          {value}
+        </div>
+        <p className="text-[11px] text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AggregateApiPage() {
   const queryClient = useQueryClient();
   const serviceStatus = useAppStore((state) => state.serviceStatus);
@@ -110,7 +152,17 @@ export default function AggregateApiPage() {
     retry: 1,
   });
 
-  usePageTransitionReady("/aggregate-api/", !isServiceReady || !isLoading);
+  const { stats: aggregateStats, isLoading: isStatsLoading } =
+    useAggregateApiStats({
+      aggregateApis,
+      enabled: isQueryEnabled && isServiceReady,
+      active: isPageActive,
+    });
+
+  usePageTransitionReady(
+    "/aggregate-api/",
+    !isServiceReady || (!isLoading && !isStatsLoading),
+  );
 
   useEffect(() => {
     if (isPageActive) return;
@@ -301,6 +353,86 @@ export default function AggregateApiPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             管理上游聚合地址与密钥，并测试连通性
           </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <Card className="glass-card border-none shadow-md backdrop-blur-md">
+          <CardContent className="pt-4">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">聚合 API 总览</p>
+              <p className="text-xs text-muted-foreground">
+                仅统计通过聚合 API 转发的请求，不包含官方账号池直连请求。
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {isStatsLoading ? (
+            Array.from({ length: 8 }).map((_, index) => (
+              <Skeleton key={index} className="h-32 w-full rounded-3xl" />
+            ))
+          ) : (
+            <>
+              <AggregateMetricCard
+                title="聚合通道"
+                value={`${aggregateStats.totalApis}`}
+                description={`已连通 ${aggregateStats.connectedApis} / 失败 ${aggregateStats.failedApis}`}
+                icon={Database}
+                toneClass="bg-primary/12 text-primary"
+              />
+              <AggregateMetricCard
+                title="历史请求"
+                value={`${aggregateStats.totalRequests}`}
+                description="全部聚合 API 请求累计"
+                icon={Activity}
+                toneClass="bg-blue-500/12 text-blue-500"
+              />
+              <AggregateMetricCard
+                title="成功请求"
+                value={`${aggregateStats.successRequests}`}
+                description="状态码 2xx"
+                icon={CheckCircle2}
+                toneClass="bg-green-500/12 text-green-500"
+              />
+              <AggregateMetricCard
+                title="异常请求"
+                value={`${aggregateStats.failedRequests}`}
+                description="4xx / 5xx 或显式错误"
+                icon={AlertTriangle}
+                toneClass="bg-red-500/12 text-red-500"
+              />
+              <AggregateMetricCard
+                title="累计令牌"
+                value={formatCompactNumber(aggregateStats.totalTokens, "0")}
+                description="聚合 API 历史 total tokens"
+                icon={ShieldCheck}
+                toneClass="bg-amber-500/12 text-amber-500"
+              />
+              <AggregateMetricCard
+                title="今日令牌"
+                value={formatCompactNumber(aggregateStats.todayTokens, "0")}
+                description="今日输入 + 输出合计"
+                icon={RefreshCw}
+                toneClass="bg-cyan-500/12 text-cyan-500"
+              />
+              <AggregateMetricCard
+                title="缓存令牌"
+                value={formatCompactNumber(aggregateStats.cachedTokens, "0")}
+                description="今日缓存命中"
+                icon={Copy}
+                toneClass="bg-indigo-500/12 text-indigo-500"
+              />
+              <AggregateMetricCard
+                title="今日费用"
+                value={`$${Number(aggregateStats.todayCost || 0).toFixed(2)}`}
+                description="按请求日志估算"
+                icon={DollarSign}
+                toneClass="bg-emerald-500/12 text-emerald-500"
+              />
+            </>
+          )}
         </div>
       </div>
 

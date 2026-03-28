@@ -14,7 +14,7 @@ pub(crate) fn read_startup_snapshot(
     let api_keys = apikey_list::read_api_keys()?;
     let api_model_options = apikey_models::read_model_options(false)?.items;
     let manual_preferred_account_id = gateway::manual_preferred_account();
-    let request_log_today_summary = requestlog_today_summary::read_requestlog_today_summary()?;
+    let request_log_today_summary = requestlog_today_summary::read_requestlog_today_summary(false)?;
     let request_logs = requestlog_list::read_request_logs(None, request_log_limit)?;
 
     Ok(StartupSnapshotResult {

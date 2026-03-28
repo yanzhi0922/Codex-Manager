@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-03-28
+
+### Added
+- “聚合 API”页面新增独立总览仪表盘，只统计通过聚合 API 转发的请求量、成功/异常、累计令牌、今日令牌、缓存命中与估算费用，不再与官方账号池仪表盘混在一起。
+
+### Fixed
+- 修复请求日志汇总链路无法按聚合 API 范围统计的问题；现在 `requestlog/summary` 与 `requestlog/today_summary` 都支持仅统计聚合 API 请求，且默认官方账号池统计行为保持不变。
+
+### Changed
+- 发布版本提升到 `0.1.14`，同步更新 workspace、前端包、Tauri 桌面端、版本一致性校验脚本与 README 版本说明。
+
 ## [0.1.13] - 2026-03-25
 
 ### Added
@@ -148,7 +159,8 @@
 ### Changed
 - 账号管理页操作区整合为单一“账号操作”下拉菜单，替代右侧多按钮堆叠，界面更简洁。
 
-[Unreleased]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.14...HEAD
+[0.1.14]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.14
 [0.1.13]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.13
 [0.1.12]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.12
 [0.1.11]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.10...v0.1.11

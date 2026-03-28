@@ -18,14 +18,19 @@ pub(super) fn try_handle(req: &JsonRpcRequest) -> Option<JsonRpcResponse> {
         "requestlog/summary" => {
             let query = super::string_param(req, "query");
             let status_filter = super::string_param(req, "statusFilter");
+            let aggregate_only = super::bool_param(req, "aggregateOnly").unwrap_or(false);
             super::value_or_error(requestlog_summary::read_request_log_filter_summary(
                 query,
                 status_filter,
+                aggregate_only,
             ))
         }
         "requestlog/clear" => super::ok_or_error(requestlog_clear::clear_request_logs()),
         "requestlog/today_summary" => {
-            super::value_or_error(requestlog_today_summary::read_requestlog_today_summary())
+            let aggregate_only = super::bool_param(req, "aggregateOnly").unwrap_or(false);
+            super::value_or_error(requestlog_today_summary::read_requestlog_today_summary(
+                aggregate_only,
+            ))
         }
         _ => return None,
     };

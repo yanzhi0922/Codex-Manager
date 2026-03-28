@@ -1304,6 +1304,165 @@ fn rpc_requestlog_list_and_summary_support_pagination() {
 }
 
 #[test]
+fn rpc_requestlog_summary_and_today_summary_can_scope_to_aggregate_apis() {
+    let ctx = RpcTestContext::new("rpc-requestlog-aggregate-scope");
+    let storage = Storage::open(ctx.db_path()).expect("open db");
+    storage.init().expect("init schema");
+    let now = now_ts();
+
+    let aggregate_log_id = storage
+        .insert_request_log(&RequestLog {
+            trace_id: Some("trc-agg-only".to_string()),
+            key_id: Some("gk-agg".to_string()),
+            account_id: Some("acc-agg".to_string()),
+            initial_account_id: Some("acc-agg".to_string()),
+            attempted_account_ids_json: Some(r#"["acc-agg"]"#.to_string()),
+            initial_aggregate_api_id: Some("agg-1".to_string()),
+            attempted_aggregate_api_ids_json: Some(r#"["agg-1"]"#.to_string()),
+            request_path: "/v1/responses".to_string(),
+            original_path: Some("/v1/responses".to_string()),
+            adapted_path: Some("/v1/responses".to_string()),
+            method: "POST".to_string(),
+            model: Some("gpt-5".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            response_adapter: Some("Passthrough".to_string()),
+            upstream_url: Some("https://gateway.example.com/openai/responses".to_string()),
+            aggregate_api_supplier_name: Some("CRS".to_string()),
+            aggregate_api_url: Some("https://gateway.example.com/openai".to_string()),
+            status_code: Some(200),
+            duration_ms: Some(333),
+            error: None,
+            created_at: now,
+            ..Default::default()
+        })
+        .expect("insert aggregate request log");
+    storage
+        .insert_request_token_stat(&RequestTokenStat {
+            request_log_id: aggregate_log_id,
+            key_id: Some("gk-agg".to_string()),
+            account_id: Some("acc-agg".to_string()),
+            model: Some("gpt-5".to_string()),
+            input_tokens: Some(40),
+            cached_input_tokens: Some(5),
+            output_tokens: Some(20),
+            total_tokens: Some(60),
+            reasoning_output_tokens: Some(10),
+            estimated_cost_usd: Some(0.2),
+            created_at: now,
+        })
+        .expect("insert aggregate token stat");
+
+    let direct_log_id = storage
+        .insert_request_log(&RequestLog {
+            trace_id: Some("trc-direct-only".to_string()),
+            key_id: Some("gk-direct".to_string()),
+            account_id: Some("acc-direct".to_string()),
+            initial_account_id: Some("acc-direct".to_string()),
+            attempted_account_ids_json: Some(r#"["acc-direct"]"#.to_string()),
+            request_path: "/v1/responses".to_string(),
+            original_path: Some("/v1/responses".to_string()),
+            adapted_path: Some("/v1/responses".to_string()),
+            method: "POST".to_string(),
+            model: Some("gpt-5".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            response_adapter: Some("Passthrough".to_string()),
+            upstream_url: Some("https://api.openai.com/v1/responses".to_string()),
+            status_code: Some(502),
+            duration_ms: Some(444),
+            error: Some("upstream error".to_string()),
+            created_at: now + 1,
+            ..Default::default()
+        })
+        .expect("insert direct request log");
+    storage
+        .insert_request_token_stat(&RequestTokenStat {
+            request_log_id: direct_log_id,
+            key_id: Some("gk-direct".to_string()),
+            account_id: Some("acc-direct".to_string()),
+            model: Some("gpt-5".to_string()),
+            input_tokens: Some(12),
+            cached_input_tokens: Some(0),
+            output_tokens: Some(8),
+            total_tokens: Some(20),
+            reasoning_output_tokens: Some(2),
+            estimated_cost_usd: Some(0.05),
+            created_at: now + 1,
+        })
+        .expect("insert direct token stat");
+
+    let summary_server = codexmanager_service::start_one_shot_server().expect("start server");
+    let summary_req = JsonRpcRequest {
+        id: 79,
+        method: "requestlog/summary".to_string(),
+        params: Some(serde_json::json!({
+            "aggregateOnly": true,
+            "statusFilter": "all"
+        })),
+    };
+    let summary_json = serde_json::to_string(&summary_req).expect("serialize requestlog summary");
+    let summary_resp = post_rpc(&summary_server.addr, &summary_json);
+    let summary_result = summary_resp
+        .get("result")
+        .expect("requestlog summary result");
+    assert_eq!(
+        summary_result
+            .get("totalCount")
+            .and_then(|value| value.as_i64()),
+        Some(1)
+    );
+    assert_eq!(
+        summary_result
+            .get("successCount")
+            .and_then(|value| value.as_i64()),
+        Some(1)
+    );
+    assert_eq!(
+        summary_result
+            .get("errorCount")
+            .and_then(|value| value.as_i64()),
+        Some(0)
+    );
+    assert_eq!(
+        summary_result
+            .get("totalTokens")
+            .and_then(|value| value.as_i64()),
+        Some(60)
+    );
+
+    let today_server = codexmanager_service::start_one_shot_server().expect("start server");
+    let today_req = JsonRpcRequest {
+        id: 80,
+        method: "requestlog/today_summary".to_string(),
+        params: Some(serde_json::json!({
+            "aggregateOnly": true
+        })),
+    };
+    let today_json = serde_json::to_string(&today_req).expect("serialize requestlog today summary");
+    let today_resp = post_rpc(&today_server.addr, &today_json);
+    let today_result = today_resp
+        .get("result")
+        .expect("requestlog today summary result");
+    assert_eq!(
+        today_result
+            .get("todayTokens")
+            .and_then(|value| value.as_i64()),
+        Some(55)
+    );
+    assert_eq!(
+        today_result
+            .get("cachedInputTokens")
+            .and_then(|value| value.as_i64()),
+        Some(5)
+    );
+    assert_eq!(
+        today_result
+            .get("reasoningOutputTokens")
+            .and_then(|value| value.as_i64()),
+        Some(10)
+    );
+}
+
+#[test]
 fn rpc_apikey_update_model_updates_name_with_chinese() {
     let ctx = RpcTestContext::new("rpc-apikey-update-name");
     let storage = Storage::open(ctx.db_path()).expect("open db");

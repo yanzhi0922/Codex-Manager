@@ -26,11 +26,13 @@ fn local_day_bounds_ts() -> Result<(i64, i64), String> {
     Ok((start, end.max(start)))
 }
 
-pub(crate) fn read_requestlog_today_summary() -> Result<RequestLogTodaySummaryResult, String> {
+pub(crate) fn read_requestlog_today_summary(
+    aggregate_only: bool,
+) -> Result<RequestLogTodaySummaryResult, String> {
     let storage = open_storage().ok_or_else(|| "open storage failed".to_string())?;
     let (start_ts, end_ts) = local_day_bounds_ts()?;
     let summary = storage
-        .summarize_request_logs_between(start_ts, end_ts)
+        .summarize_request_logs_between_scoped(start_ts, end_ts, aggregate_only)
         .map_err(|err| format!("summarize request logs failed: {err}"))?;
     let input_tokens = summary.input_tokens.max(0);
     let cached_input_tokens = summary.cached_input_tokens.max(0);
