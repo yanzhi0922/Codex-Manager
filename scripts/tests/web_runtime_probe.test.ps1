@@ -23,6 +23,8 @@ function Write-Utf8File {
 }
 
 try {
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+  $currentVersion = ((Get-Content (Join-Path $repoRoot "apps/src-tauri/tauri.conf.json") -Raw) | ConvertFrom-Json).version
   $runtimeJsonPath = Join-Path $tempRoot "runtime.json"
   $initializeJsonPath = Join-Path $tempRoot "initialize.json"
 
@@ -43,7 +45,7 @@ try {
   "id": 1,
   "result": {
     "serverName": "codexmanager-service",
-    "version": "0.1.15"
+    "version": "$currentVersion"
   }
 }
 "@

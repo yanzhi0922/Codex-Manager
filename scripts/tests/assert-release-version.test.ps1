@@ -5,7 +5,10 @@ if (-not (Test-Path $scriptPath -PathType Leaf)) {
   throw "missing assert-release-version.ps1 at $scriptPath"
 }
 
-& $scriptPath -Tag "v0.1.15" | Out-Null
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$currentVersion = ((Get-Content (Join-Path $repoRoot "apps/src-tauri/tauri.conf.json") -Raw) | ConvertFrom-Json).version
+
+& $scriptPath -Tag "v$currentVersion" | Out-Null
 if (-not $?) {
   throw "assert-release-version.ps1 should pass on current workspace"
 }
@@ -30,6 +33,7 @@ try {
   $rootCargo = Join-Path $tempRoot "Cargo.toml"
   $tauriCargo = Join-Path $tempRoot "apps/src-tauri/Cargo.toml"
   $tauriConfig = Join-Path $tempRoot "apps/src-tauri/tauri.conf.json"
+  $frontendPackage = Join-Path $tempRoot "apps/package.json"
   $cratesRoot = Join-Path $tempRoot "crates"
   $coreCargo = Join-Path $cratesRoot "core/Cargo.toml"
   $serviceCargo = Join-Path $cratesRoot "service/Cargo.toml"
@@ -55,6 +59,13 @@ edition = "2021"
 }
 "@
 
+  Write-Utf8File -Path $frontendPackage -Content @"
+{
+  "name": "codexmanager-frontend",
+  "version": "0.9.9"
+}
+"@
+
   Write-Utf8File -Path $coreCargo -Content @"
 [package]
 name = "codexmanager-core"
@@ -69,7 +80,7 @@ version = "0.9.9"
 edition = "2021"
 "@
 
-  & $scriptPath -Tag "v0.9.9" -RootCargoTomlPath $rootCargo -CargoTomlPath $tauriCargo -TauriConfigPath $tauriConfig -WorkspaceCratesRoot $cratesRoot | Out-Null
+  & $scriptPath -Tag "v0.9.9" -RootCargoTomlPath $rootCargo -CargoTomlPath $tauriCargo -TauriConfigPath $tauriConfig -FrontendPackageJsonPath $frontendPackage -WorkspaceCratesRoot $cratesRoot | Out-Null
   if (-not $?) {
     throw "assert-release-version.ps1 should pass on aligned versions"
   }
@@ -83,12 +94,36 @@ edition = "2021"
 
   $failed = $false
   try {
-    & $scriptPath -Tag "v0.9.9" -RootCargoTomlPath $rootCargo -CargoTomlPath $tauriCargo -TauriConfigPath $tauriConfig -WorkspaceCratesRoot $cratesRoot | Out-Null
+    & $scriptPath -Tag "v0.9.9" -RootCargoTomlPath $rootCargo -CargoTomlPath $tauriCargo -TauriConfigPath $tauriConfig -FrontendPackageJsonPath $frontendPackage -WorkspaceCratesRoot $cratesRoot | Out-Null
   } catch {
     $failed = $_.Exception.Message -like "*workspace crate version mismatch*"
   }
   if (-not $failed) {
     throw "expected workspace crate mismatch to fail"
+  }
+
+  Write-Utf8File -Path $serviceCargo -Content @"
+[package]
+name = "codexmanager-service"
+version = "0.9.9"
+edition = "2021"
+"@
+
+  Write-Utf8File -Path $frontendPackage -Content @"
+{
+  "name": "codexmanager-frontend",
+  "version": "1.0.0"
+}
+"@
+
+  $frontendFailed = $false
+  try {
+    & $scriptPath -Tag "v0.9.9" -RootCargoTomlPath $rootCargo -CargoTomlPath $tauriCargo -TauriConfigPath $tauriConfig -FrontendPackageJsonPath $frontendPackage -WorkspaceCratesRoot $cratesRoot | Out-Null
+  } catch {
+    $frontendFailed = $_.Exception.Message -like "*version mismatch*" -and $_.Exception.Message -match 'apps[\\/]+package\.json'
+  }
+  if (-not $frontendFailed) {
+    throw "expected frontend package version mismatch to fail"
   }
 
   Write-Host "assert-release-version.ps1 checks current workspace and synthetic workspace alignment"

@@ -8,9 +8,8 @@ on:
         required: true
         type: string
       ref:
-        description: "Git ref/branch/sha to build"
+        description: "Git ref/branch/sha to build (leave empty to build the tag itself)"
         required: false
-        default: "main"
         type: string
       prerelease:
         description: "Release channel override (auto/true/false)"
@@ -29,20 +28,38 @@ permissions:
 env:
   TAURI_CLI_VERSION: 2.10.1
   CARGO_TARGET_DIR: ${{ github.workspace }}/target-shared
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
   group: ${{ format('{0}-tag-{1}', github.workflow, startsWith(github.event.inputs.tag, 'v') && github.event.inputs.tag || format('v{0}', github.event.inputs.tag)) }}
   cancel-in-progress: false
 
 jobs:
-  build_frontend_dist:
+  validate_release_version:
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Validate release metadata
+        uses: ./.github/actions/validate-release-version
+        with:
+          tag: ${{ github.event.inputs.tag }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
+
+  build_frontend_dist:
+    needs: validate_release_version
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
 
       - name: Setup release environment
         uses: ./.github/actions/setup-release-env
@@ -79,7 +96,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
 
       - name: Setup release environment
         uses: ./.github/actions/setup-release-env
@@ -188,7 +205,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
 
       - name: Setup release environment
         uses: ./.github/actions/setup-release-env
@@ -331,7 +348,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
 
       - name: Setup release environment
         uses: ./.github/actions/setup-release-env
@@ -486,7 +503,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
 
       - name: Download artifacts
         uses: actions/download-artifact@v8
@@ -528,7 +545,7 @@ jobs:
         uses: ./.github/actions/publish-github-release
         with:
           tag: ${{ github.event.inputs.tag }}
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag }}
           prerelease-input: ${{ github.event.inputs.prerelease || 'auto' }}
           assets-dir: release-assets
 

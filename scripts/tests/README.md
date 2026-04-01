@@ -25,13 +25,13 @@
 - `assert-release-version.test.ps1`
 - `gateway_regression_suite.test.ps1`
 - `rebuild.test.ps1`
-- `release_version.test.ps1`
 - `web_runtime_probe.test.ps1`
 
 特点：
 
 - 不依赖真实 OpenAI 上游
 - 更适合验证参数解析、串联关系、版本约束与脚本返回行为
+- `assert-release-version.test.ps1` 会额外覆盖 workspace / 前端包 / Tauri 版本一致性约束
 
 ## 推荐执行顺序
 

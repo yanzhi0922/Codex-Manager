@@ -21,21 +21,19 @@
 ### 发布
 
 - `release/assert-release-version.ps1`
-- `release/build-tauri-with-retry.ps1`
-- `release/build-tauri-with-retry.sh`
 - `release/disable-tauri-before-build.ps1`
-- `release/publish-github-release.sh`
-- `release/stage-service-package.ps1`
-- `release/stage-service-package.sh`
+- `.github/actions/build-tauri-with-retry`
+- `.github/actions/stage-service-package`
+- `.github/actions/publish-github-release`
 
 ### 仅 CI / workflow 间接调用
 
 以下脚本通常由 workflow 或 composite action 调用，不建议作为日常手工入口：
 
-- `release/build-tauri-with-retry.*`
-- `release/stage-service-package.*`
-- `release/publish-github-release.sh`
 - `release/assert-release-version.ps1`
+- `.github/actions/build-tauri-with-retry`
+- `.github/actions/stage-service-package`
+- `.github/actions/publish-github-release`
 
 ## 使用建议
 

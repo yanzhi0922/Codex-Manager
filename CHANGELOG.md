@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-04-02
+
+### Fixed
+- 发布 workflow 现在会在任何平台构建开始前校验 `tag` / `ref` 是否指向同一 commit，避免“打的是 A、发的是 B”这类版本错位。
+- 版本一致性校验脚本补上了 `apps/package.json`，`scripts/bump-version.ps1` 也会同步更新前端包版本，避免前端包版本漂移悄悄混过 release。
+
+### Changed
+- `release-all.yml` 在未显式传 `ref` 时会默认直接构建对应 `tag`，并提前开启 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`，为 GitHub Actions 的 Node 24 迁移做兼容。
+- `scripts/rebuild.ps1`、`scripts/rebuild-linux.sh`、`scripts/rebuild-macos.sh` 已统一改为调用 `pnpm dlx @tauri-apps/cli@2.10.1 build`，与 CI 的 Tauri 打包链路保持一致，不再依赖本机 `cargo tauri build`。
+- 脚本测试与发布文档同步收口：移除了失效脚本引用，版本探针改为尽量动态读取当前仓库版本，降低后续 patch release 的人工维护成本。
+
 ## [0.1.15] - 2026-04-02
 
 ### Fixed
@@ -169,7 +180,8 @@
 ### Changed
 - 账号管理页操作区整合为单一“账号操作”下拉菜单，替代右侧多按钮堆叠，界面更简洁。
 
-[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.16
 [0.1.15]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.15
 [0.1.14]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.14
 [0.1.13]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.13

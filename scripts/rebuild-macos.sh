@@ -48,6 +48,7 @@ TAURI_DIR="$APPS_ROOT/src-tauri"
 ROOT_TARGET="$ROOT/target"
 TAURI_TARGET="$TAURI_DIR/target"
 DIST_DIR="$FRONTEND_ROOT/out"
+TAURI_CLI_VERSION="2.10.1"
 
 step() { echo "$*"; }
 
@@ -85,16 +86,15 @@ if [[ "$CLEAN_DIST" == "true" ]]; then
   remove_dir "$DIST_DIR"
 fi
 
-pushd "$TAURI_DIR" >/dev/null
 target_args=()
 if [[ -n "$TARGET" ]]; then
   target_args=(--target "$TARGET")
 fi
+tauri_cmd=(pnpm --dir apps dlx "@tauri-apps/cli@$TAURI_CLI_VERSION" build)
 if [[ "$NO_BUNDLE" == "true" ]]; then
-  run_cmd "cargo tauri build --no-bundle ${target_args[*]}" cargo tauri build --no-bundle "${target_args[@]}"
+  run_cmd "pnpm --dir apps dlx @tauri-apps/cli@$TAURI_CLI_VERSION build --no-bundle ${target_args[*]}" "${tauri_cmd[@]}" --no-bundle "${target_args[@]}"
 else
-  run_cmd "cargo tauri build --bundles $BUNDLES ${target_args[*]}" cargo tauri build --bundles "$BUNDLES" "${target_args[@]}"
+  run_cmd "pnpm --dir apps dlx @tauri-apps/cli@$TAURI_CLI_VERSION build --bundles $BUNDLES ${target_args[*]}" "${tauri_cmd[@]}" --bundles "$BUNDLES" "${target_args[@]}"
 fi
-popd >/dev/null
 
 step "done"

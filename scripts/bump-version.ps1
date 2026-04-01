@@ -25,11 +25,25 @@ function Update-TextFileVersion {
   Set-Content $Path $next
 }
 
+function Update-JsonFileVersion {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Version
+  )
+
+  $json = Get-Content $Path -Raw | ConvertFrom-Json
+  $json.version = $Version
+  $json | ConvertTo-Json -Depth 100 | Set-Content $Path
+}
+
 $cargoWorkspace = Join-Path $root 'Cargo.toml'
 Update-TextFileVersion -Path $cargoWorkspace -Pattern '^(version\s*=\s*")([^"]+)(")(\r?)$' -Replacement "`${1}$Version`$3$4"
 
 $tauriCargo = Join-Path $root 'apps/src-tauri/Cargo.toml'
 Update-TextFileVersion -Path $tauriCargo -Pattern '^(version\s*=\s*")([^"]+)(")(\r?)$' -Replacement "`${1}$Version`$3$4"
+
+$frontendPackage = Join-Path $root 'apps/package.json'
+Update-JsonFileVersion -Path $frontendPackage -Version $Version
 
 $tauriConfPath = Join-Path $root 'apps/src-tauri/tauri.conf.json'
 $tauriConf = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
@@ -39,5 +53,6 @@ $tauriConf | ConvertTo-Json -Depth 100 | Set-Content $tauriConfPath
 Write-Host "Version updated to $Version"
 Write-Host "- Cargo workspace: $cargoWorkspace"
 Write-Host "- Tauri Cargo: $tauriCargo"
+Write-Host "- Frontend package: $frontendPackage"
 Write-Host "- Tauri conf: $tauriConfPath"
 Write-Host "Next: run cargo check commands to refresh lockfiles if needed."

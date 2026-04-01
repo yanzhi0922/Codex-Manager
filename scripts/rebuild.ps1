@@ -33,6 +33,7 @@ $rootTarget = Join-Path $root "target"
 $tauriTarget = Join-Path $tauriDir "target"
 $distDir = Join-Path $frontendRoot "out"
 $tauriConfig = Join-Path $tauriDir "tauri.conf.json"
+$tauriCliVersion = "2.10.1"
 
 $appName = "CodexManager"
 if (Test-Path $tauriConfig) {
@@ -67,7 +68,7 @@ function Remove-Dir {
   }
 }
 
-function Run-Cargo {
+function Run-Command {
   param([string]$CommandLine, [scriptblock]$Action)
   if ($DryRun) {
     Write-Step "DRY RUN: $CommandLine"
@@ -172,16 +173,13 @@ function Invoke-LocalWindowsBuild {
       Remove-Dir $distDir
     }
 
-    Push-Location $tauriDir
-    try {
-      if ($NoBundle) {
-        Run-Cargo "cargo tauri build --no-bundle" { cargo tauri build --no-bundle }
-      } else {
-        Run-Cargo "cargo tauri build --bundles $Bundle" { cargo tauri build --bundles $Bundle }
-      }
-    } finally {
-      Pop-Location
+    $tauriArgs = @('--dir', 'apps', 'dlx', "@tauri-apps/cli@$tauriCliVersion", 'build')
+    if ($NoBundle) {
+      $tauriArgs += '--no-bundle'
+    } else {
+      $tauriArgs += @('--bundles', $Bundle)
     }
+    Run-Command ("pnpm " + ($tauriArgs -join ' ')) { pnpm @tauriArgs }
 
     if ($Portable) {
       if ($DryRun) {
@@ -213,6 +211,19 @@ function Invoke-LocalWindowsBuild {
 function Invoke-AllPlatformBuild {
   $repo = Get-GitHubRepoInfo
   $token = Resolve-GitHubToken
+  if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
+    $ReleaseTag = (& git describe --tags --exact-match 2>$null) -join ""
+  }
+  if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
+    throw "release tag required for -AllPlatforms. Pass -ReleaseTag (e.g. v0.0.6)."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($GitRef)) {
+    $tagRef = (& git rev-parse --verify "$ReleaseTag^{commit}" 2>$null) -join ""
+    if (-not [string]::IsNullOrWhiteSpace($tagRef)) {
+      $GitRef = $ReleaseTag
+    }
+  }
   if ([string]::IsNullOrWhiteSpace($GitRef)) {
     $GitRef = (& git branch --show-current 2>$null) -join ""
   }
@@ -221,13 +232,6 @@ function Invoke-AllPlatformBuild {
   }
   if ([string]::IsNullOrWhiteSpace($GitRef)) {
     throw "cannot resolve git ref. Pass -GitRef explicitly."
-  }
-
-  if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
-    $ReleaseTag = (& git describe --tags --exact-match 2>$null) -join ""
-  }
-  if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
-    throw "release tag required for -AllPlatforms. Pass -ReleaseTag (e.g. v0.0.6)."
   }
 
   # Map legacy workflow names to the single release entry for backward compatibility.

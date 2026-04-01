@@ -44,7 +44,9 @@ A local desktop + service toolkit for managing Codex-compatible accounts, usage,
 | Build locally, package, publish, run scripts | [Build, release, and script guide](docs/release/20260310122606851_构建发布与脚本说明.md) |
 
 ## Recent Changes
-- Current latest version: `v0.1.15` (2026-04-02)
+- Current latest version: `v0.1.16` (2026-04-02)
+- The release path now has a hard gate: the workflow validates workspace / frontend / Tauri version alignment and rejects any `tag` / `ref` pair that resolves to different commits.
+- Local `rebuild` scripts now match CI exactly by calling `pnpm --dir apps dlx @tauri-apps/cli@2.10.1 build`, so local packaging no longer depends on a separately installed `cargo tauri`.
 - Added smart load balancing inside each pool: the account pool now ranks candidates by quota headroom, inflight load, and cooldown state, while the Aggregate API pool combines round-robin with runtime health, inflight pressure, and recent test results.
 - Cross-pool priority still behaves the same: `Account Priority` and `Aggregate Priority` only fall back to the other pool after the preferred pool is fully unavailable or exhausted.
 - Desktop updater defaults, release links, and Docker release images are now aligned with `yanzhi0922/Codex-Manager` and `ghcr.io/yanzhi0922`, so fork releases no longer point back to the upstream repository.
@@ -57,7 +59,7 @@ A local desktop + service toolkit for managing Codex-compatible accounts, usage,
 - Platform keys now support service tier overrides with `Follow Request`, `Fast`, and `Flex`. `Fast` maps to upstream `priority`, while `Flex` is forwarded as `flex`; the desktop create/edit flow now saves and round-trips these values correctly.
 - The Settings page restores the service listen-mode switch so you can choose between `localhost` and `0.0.0.0`; the `Check for Updates` button now shows loading only for manual checks.
 - Web and desktop interaction bugs were also cleaned up: refreshing non-home Web routes no longer downloads the wrong file, and clipboard actions now degrade gracefully when `navigator.clipboard.writeText` is unavailable.
-- The release path stays unified: the product version is now `0.1.15`, and the workspace, frontend package, Tauri desktop app, release-version checks, and README version notes are all kept in sync. See [CHANGELOG.md](CHANGELOG.md) for the full history.
+- The release path stays unified: the product version is now `0.1.16`, and the workspace, frontend package, Tauri desktop app, release-version checks, and README version notes are all kept in sync. See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ### Recent Commit Highlights
 - `cb990a1`: refine account cleanup entry points and tighten the docs surface. The accounts menu now exposes banned cleanup and count display, while README/docs navigation is trimmed to the current mainline path.

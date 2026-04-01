@@ -19,8 +19,8 @@ if ($output -notmatch "DRY RUN: remove" -and $output -notmatch "skip:") {
 if ($output -notlike '*src-tauri\target*') {
   throw "expected src-tauri target cleanup in output"
 }
-if ($output -notlike "*cargo tauri build --bundles nsis*") {
-  throw "expected tauri build command in output"
+if ($output -notlike "*pnpm --dir apps dlx @tauri-apps/cli@2.10.1 build --bundles nsis*") {
+  throw "expected Tauri CLI build command in output"
 }
 if ($output -notmatch "portable") {
   throw "expected portable output in dry-run"

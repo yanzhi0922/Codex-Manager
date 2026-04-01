@@ -4,7 +4,8 @@ param(
     [string]$RootCargoTomlPath = 'Cargo.toml',
     [string]$CargoTomlPath = 'apps/src-tauri/Cargo.toml',
     [string]$WorkspaceCratesRoot = 'crates',
-    [string]$TauriConfigPath = 'apps/src-tauri/tauri.conf.json'
+    [string]$TauriConfigPath = 'apps/src-tauri/tauri.conf.json',
+    [string]$FrontendPackageJsonPath = 'apps/package.json'
 )
 
 Set-StrictMode -Version Latest
@@ -72,6 +73,22 @@ function Get-PackageVersionEntry {
     throw "failed to read [package] version from $Path"
 }
 
+function Get-PackageJsonVersion {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path $Path -PathType Leaf)) {
+        throw "package.json not found: $Path"
+    }
+
+    $packageJson = (Get-Content $Path -Raw) | ConvertFrom-Json
+    $version = "$($packageJson.version)".Trim()
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        throw "$Path missing version"
+    }
+
+    return $version
+}
+
 $tagInput = $Tag
 if ([string]::IsNullOrWhiteSpace($tagInput)) {
     throw 'release tag is required'
@@ -100,11 +117,16 @@ if ([string]::IsNullOrWhiteSpace($tauriVersion)) {
     throw "$TauriConfigPath missing version"
 }
 
+$frontendVersion = Get-PackageJsonVersion -Path $FrontendPackageJsonPath
+
 if ($workspaceVersion -ne $cargoVersion) {
     throw "version mismatch: $RootCargoTomlPath=$workspaceVersion $CargoTomlPath=$cargoVersion"
 }
 if ($cargoVersion -ne $tauriVersion) {
     throw "version mismatch: $CargoTomlPath=$cargoVersion $TauriConfigPath=$tauriVersion"
+}
+if ($cargoVersion -ne $frontendVersion) {
+    throw "version mismatch: $CargoTomlPath=$cargoVersion $FrontendPackageJsonPath=$frontendVersion"
 }
 if ($cargoVersion -ne $tagVersion) {
     throw "tag/version mismatch: tag=$normalizedTag expects $tagVersion, but app version is $cargoVersion"
@@ -135,4 +157,4 @@ foreach ($manifest in $workspaceCrateManifests) {
     }
 }
 
-Write-Host "Version OK: workspace=$workspaceVersion app=$cargoVersion tauri=$tauriVersion crates=$($workspaceCrateManifests.Count) tag=$normalizedTag"
+Write-Host "Version OK: workspace=$workspaceVersion frontend=$frontendVersion app=$cargoVersion tauri=$tauriVersion crates=$($workspaceCrateManifests.Count) tag=$normalizedTag"
