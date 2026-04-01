@@ -41,7 +41,7 @@ pub(crate) fn profile_from_protocol(
 pub(crate) fn normalize_rotation_strategy(value: Option<String>) -> Result<String, String> {
     match value {
         Some(raw) => match normalize_key(&raw).as_str() {
-            "account" | "account_rotation" | "account_rotate" | "账号轮转" => {
+            "account" | "account_rotation" | "account_rotate" | "账号轮转" | "账号轮转优先" => {
                 Ok(ROTATION_ACCOUNT.to_string())
             }
             "aggregateapi"
@@ -49,7 +49,8 @@ pub(crate) fn normalize_rotation_strategy(value: Option<String>) -> Result<Strin
             | "aggregate_api_rotation"
             | "aggregateapirotation"
             | "聚合api"
-            | "聚合api轮转" => Ok(ROTATION_AGGREGATE_API.to_string()),
+            | "聚合api轮转"
+            | "聚合api轮转优先" => Ok(ROTATION_AGGREGATE_API.to_string()),
             other => Err(format!("unsupported rotation strategy: {other}")),
         },
         None => Ok(ROTATION_ACCOUNT.to_string()),
@@ -98,4 +99,23 @@ pub(crate) fn normalize_static_headers_json(
         }
     }
     Ok(Some(trimmed.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_rotation_strategy, ROTATION_ACCOUNT, ROTATION_AGGREGATE_API};
+
+    #[test]
+    fn normalize_rotation_strategy_accepts_account_priority_alias() {
+        let actual =
+            normalize_rotation_strategy(Some("账号轮转优先".to_string())).expect("normalize");
+        assert_eq!(actual, ROTATION_ACCOUNT);
+    }
+
+    #[test]
+    fn normalize_rotation_strategy_accepts_aggregate_priority_alias() {
+        let actual =
+            normalize_rotation_strategy(Some("聚合API轮转优先".to_string())).expect("normalize");
+        assert_eq!(actual, ROTATION_AGGREGATE_API);
+    }
 }

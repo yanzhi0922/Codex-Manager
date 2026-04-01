@@ -1,10 +1,10 @@
-use crate::apikey_profile::{PROTOCOL_ANTHROPIC_NATIVE, ROTATION_AGGREGATE_API};
+use crate::apikey_profile::PROTOCOL_ANTHROPIC_NATIVE;
 use bytes::Bytes;
 use codexmanager_core::storage::ApiKey;
 use reqwest::Method;
 use tiny_http::Request;
 
-use super::{LocalValidationError, LocalValidationResult};
+use super::{LocalValidationError, LocalValidationResult, PreparedGatewayRequest};
 
 fn resolve_effective_request_overrides(
     api_key: &ApiKey,
@@ -87,41 +87,28 @@ pub(super) fn build_local_validation_result(
     let request_method = request.method().as_str().to_string();
     let method = Method::from_bytes(request_method.as_bytes())
         .map_err(|_| LocalValidationError::new(405, "unsupported method"))?;
-    let initial_request_meta = super::super::parse_request_metadata(&body);
     let initial_local_conversation_id = incoming_headers.conversation_id().map(str::to_string);
-
-    if api_key.rotation_strategy == ROTATION_AGGREGATE_API {
-        let (rewritten_body, model_for_log, reasoning_for_log, has_prompt_cache_key, request_shape) =
-            apply_passthrough_request_overrides(&normalized_path, body, &api_key);
-        let incoming_headers = incoming_headers
-            .with_conversation_id_override(initial_local_conversation_id.as_deref());
-        return Ok(LocalValidationResult {
-            trace_id,
-            incoming_headers,
-            storage,
-            original_path: normalized_path.clone(),
-            path: normalized_path,
-            body: Bytes::from(rewritten_body),
-            is_stream: initial_request_meta.is_stream,
-            has_prompt_cache_key,
-            request_shape,
-            protocol_type: api_key.protocol_type,
-            rotation_strategy: api_key.rotation_strategy,
-            aggregate_api_id: api_key.aggregate_api_id,
-            upstream_base_url: api_key.upstream_base_url,
-            static_headers_json: api_key.static_headers_json,
-            response_adapter: super::super::ResponseAdapter::Passthrough,
-            tool_name_restore_map: super::super::ToolNameRestoreMap::default(),
-            request_method,
-            key_id: api_key.id,
-            platform_key_hash: api_key.key_hash,
-            local_conversation_id: initial_local_conversation_id,
-            conversation_binding: None,
-            model_for_log,
-            reasoning_for_log,
-            method,
-        });
-    }
+    let incoming_headers =
+        incoming_headers.with_conversation_id_override(initial_local_conversation_id.as_deref());
+    let (
+        aggregate_body,
+        aggregate_model_for_log,
+        aggregate_reasoning_for_log,
+        aggregate_has_prompt_cache_key,
+        aggregate_request_shape,
+    ) = apply_passthrough_request_overrides(&normalized_path, body.clone(), &api_key);
+    let aggregate_request = PreparedGatewayRequest {
+        path: normalized_path.clone(),
+        body: Bytes::from(aggregate_body),
+        has_prompt_cache_key: aggregate_has_prompt_cache_key,
+        request_shape: aggregate_request_shape,
+        response_adapter: super::super::ResponseAdapter::Passthrough,
+        tool_name_restore_map: super::super::ToolNameRestoreMap::default(),
+        local_conversation_id: initial_local_conversation_id.clone(),
+        conversation_binding: None,
+        model_for_log: aggregate_model_for_log,
+        reasoning_for_log: aggregate_reasoning_for_log,
+    };
 
     let original_body = body.clone();
     let adapted = super::super::adapt_request_for_protocol(
@@ -157,7 +144,7 @@ pub(super) fn build_local_validation_result(
     let client_request_meta = super::super::parse_request_metadata(&body);
     let (effective_model, effective_reasoning, effective_service_tier) =
         resolve_effective_request_overrides(&api_key);
-    let local_conversation_id = incoming_headers.conversation_id().map(str::to_string);
+    let local_conversation_id = initial_local_conversation_id.clone();
     let conversation_binding = super::super::conversation_binding::load_conversation_binding(
         &storage,
         api_key.key_hash.as_str(),
@@ -168,10 +155,6 @@ pub(super) fn build_local_validation_result(
         local_conversation_id.as_deref(),
         conversation_binding.as_ref(),
     );
-    // 中文注释：保留原始 local conversation_id 作为对外会话标识；
-    // 线程世代只参与 prompt_cache_key 与路由绑定，不直接污染对外请求头。
-    let incoming_headers =
-        incoming_headers.with_conversation_id_override(local_conversation_id.as_deref());
     body = if effective_thread_anchor.is_some() {
         super::super::apply_request_overrides_with_service_tier_and_forced_prompt_cache_key(
             &path,
@@ -200,33 +183,35 @@ pub(super) fn build_local_validation_result(
         .reasoning_effort
         .or(api_key.reasoning_effort.clone());
     let is_stream = client_request_meta.is_stream;
-    let has_prompt_cache_key = client_request_meta.has_prompt_cache_key;
-    let request_shape = client_request_meta.request_shape;
+    let account_request = PreparedGatewayRequest {
+        path,
+        body: Bytes::from(body),
+        has_prompt_cache_key: client_request_meta.has_prompt_cache_key,
+        request_shape: client_request_meta.request_shape,
+        response_adapter,
+        tool_name_restore_map,
+        local_conversation_id,
+        conversation_binding,
+        model_for_log,
+        reasoning_for_log,
+    };
 
     Ok(LocalValidationResult {
         trace_id,
         incoming_headers,
         storage,
         original_path: normalized_path,
-        path,
-        body: Bytes::from(body),
         is_stream,
-        has_prompt_cache_key,
-        request_shape,
         protocol_type: api_key.protocol_type,
         upstream_base_url: api_key.upstream_base_url,
         static_headers_json: api_key.static_headers_json,
-        response_adapter,
-        tool_name_restore_map,
         request_method,
         key_id: api_key.id,
         platform_key_hash: api_key.key_hash,
-        local_conversation_id,
-        conversation_binding,
         rotation_strategy: api_key.rotation_strategy,
         aggregate_api_id: api_key.aggregate_api_id,
-        model_for_log,
-        reasoning_for_log,
+        account_request,
+        aggregate_request,
         method,
     })
 }

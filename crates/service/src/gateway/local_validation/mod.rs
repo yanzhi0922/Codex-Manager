@@ -7,31 +7,54 @@ mod auth;
 mod io;
 mod request;
 
+pub(super) struct PreparedGatewayRequest {
+    pub(super) path: String,
+    pub(super) body: Bytes,
+    pub(super) has_prompt_cache_key: bool,
+    pub(super) request_shape: Option<String>,
+    pub(super) response_adapter: super::ResponseAdapter,
+    pub(super) tool_name_restore_map: super::ToolNameRestoreMap,
+    pub(super) local_conversation_id: Option<String>,
+    pub(super) conversation_binding: Option<ConversationBinding>,
+    pub(super) model_for_log: Option<String>,
+    pub(super) reasoning_for_log: Option<String>,
+}
+
 pub(super) struct LocalValidationResult {
     pub(super) trace_id: String,
     pub(super) incoming_headers: super::IncomingHeaderSnapshot,
     pub(super) storage: crate::storage_helpers::StorageHandle,
     pub(super) original_path: String,
-    pub(super) path: String,
-    pub(super) body: Bytes,
     pub(super) is_stream: bool,
-    pub(super) has_prompt_cache_key: bool,
-    pub(super) request_shape: Option<String>,
     pub(super) protocol_type: String,
     pub(super) rotation_strategy: String,
     pub(super) aggregate_api_id: Option<String>,
     pub(super) upstream_base_url: Option<String>,
     pub(super) static_headers_json: Option<String>,
-    pub(super) response_adapter: super::ResponseAdapter,
-    pub(super) tool_name_restore_map: super::ToolNameRestoreMap,
     pub(super) request_method: String,
     pub(super) key_id: String,
     pub(super) platform_key_hash: String,
-    pub(super) local_conversation_id: Option<String>,
-    pub(super) conversation_binding: Option<ConversationBinding>,
-    pub(super) model_for_log: Option<String>,
-    pub(super) reasoning_for_log: Option<String>,
+    pub(super) account_request: PreparedGatewayRequest,
+    pub(super) aggregate_request: PreparedGatewayRequest,
     pub(super) method: Method,
+}
+
+impl LocalValidationResult {
+    pub(super) fn primary_request(&self) -> &PreparedGatewayRequest {
+        if self.rotation_strategy == crate::apikey_profile::ROTATION_AGGREGATE_API {
+            &self.aggregate_request
+        } else {
+            &self.account_request
+        }
+    }
+
+    pub(super) fn account_request(&self) -> &PreparedGatewayRequest {
+        &self.account_request
+    }
+
+    pub(super) fn aggregate_request(&self) -> &PreparedGatewayRequest {
+        &self.aggregate_request
+    }
 }
 
 pub(super) struct LocalValidationError {

@@ -6,6 +6,8 @@ mod basic;
 mod openai;
 #[path = "gateway_logs/retry_logging.rs"]
 mod retry_logging;
+#[path = "gateway_logs/rotation_priority.rs"]
+mod rotation_priority;
 #[path = "gateway_logs/support.rs"]
 mod support;
 

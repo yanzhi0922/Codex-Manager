@@ -50,8 +50,8 @@ const SERVICE_TIER_LABELS: Record<string, string> = {
 };
 
 const ROTATION_STRATEGY_LABELS: Record<string, string> = {
-  account_rotation: "账号轮转",
-  aggregate_api_rotation: "聚合API轮转",
+  account_rotation: "账号轮转优先",
+  aggregate_api_rotation: "聚合API轮转优先",
 };
 
 interface ApiKeyModalProps {
@@ -254,20 +254,20 @@ export function ApiKeyModal({ open, onOpenChange, apiKey }: ApiKeyModalProps) {
                   <SelectValue>
                     {(value) =>
                       ROTATION_STRATEGY_LABELS[String(value || "")] ||
-                      "账号轮转"
+                      "账号轮转优先"
                     }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent align="start">
-                  <SelectItem value="account_rotation">账号轮转</SelectItem>
+                  <SelectItem value="account_rotation">账号轮转优先</SelectItem>
                   <SelectItem value="aggregate_api_rotation">
-                    聚合API轮转
+                    聚合API轮转优先
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <p className="col-span-2 -mt-1 text-[11px] text-muted-foreground">
-              账号轮转保持现有路由逻辑；聚合API轮转会直接透传请求。
+              账号轮转优先会先走账号池，耗尽后自动切到聚合API；聚合API轮转优先则相反。
             </p>
           </div>
 

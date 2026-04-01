@@ -43,8 +43,8 @@ import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { formatCompactNumber } from "@/lib/utils/usage";
 
 const ROTATION_STRATEGY_LABELS: Record<string, string> = {
-  account_rotation: "账号轮转",
-  aggregate_api_rotation: "聚合API轮转",
+  account_rotation: "账号轮转优先",
+  aggregate_api_rotation: "聚合API轮转优先",
 };
 
 export default function ApiKeysPage() {

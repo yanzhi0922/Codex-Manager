@@ -1,6 +1,8 @@
 use bytes::Bytes;
-use codexmanager_core::storage::{AggregateApi, Storage};
+use codexmanager_core::storage::{now_ts, AggregateApi, Storage};
 use reqwest::header::{HeaderName, HeaderValue};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tiny_http::Request;
 
@@ -11,6 +13,46 @@ use crate::aggregate_api::{
 use crate::gateway::request_log::RequestLogUsage;
 
 const AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL: usize = 3;
+const DEFAULT_AGGREGATE_API_HEALTH_SCORE: i32 = 100;
+const MIN_AGGREGATE_API_HEALTH_SCORE: i32 = 0;
+const MAX_AGGREGATE_API_HEALTH_SCORE: i32 = 200;
+const AGGREGATE_API_HEALTH_TTL_SECS: i64 = 24 * 60 * 60;
+const AGGREGATE_API_INFLIGHT_PENALTY: i32 = 250;
+const AGGREGATE_API_COOLDOWN_PENALTY: i32 = 120;
+
+#[derive(Debug, Clone, Default)]
+struct AggregateApiQualityRecord {
+    health_score: i32,
+    updated_at: i64,
+}
+
+#[derive(Default)]
+struct AggregateApiRuntimeState {
+    next_start_by_provider: HashMap<String, usize>,
+    inflight_by_api_id: HashMap<String, usize>,
+    quality_by_api_id: HashMap<String, AggregateApiQualityRecord>,
+}
+
+static AGGREGATE_API_RUNTIME_STATE: OnceLock<Mutex<AggregateApiRuntimeState>> = OnceLock::new();
+
+struct AggregateApiInflightGuard {
+    api_id: String,
+}
+
+impl Drop for AggregateApiInflightGuard {
+    fn drop(&mut self) {
+        let lock = AGGREGATE_API_RUNTIME_STATE
+            .get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+        let mut state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+        if let Some(value) = state.inflight_by_api_id.get_mut(self.api_id.as_str()) {
+            if *value > 1 {
+                *value -= 1;
+            } else {
+                state.inflight_by_api_id.remove(self.api_id.as_str());
+            }
+        }
+    }
+}
 
 fn should_skip_forward_header(name: &str) -> bool {
     matches!(
@@ -47,6 +89,147 @@ fn normalize_candidate_order(mut candidates: Vec<AggregateApi>) -> Vec<Aggregate
             .then(left.id.cmp(&right.id))
     });
     candidates
+}
+
+fn acquire_aggregate_api_inflight(api_id: &str) -> AggregateApiInflightGuard {
+    let lock =
+        AGGREGATE_API_RUNTIME_STATE.get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+    let mut state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+    let entry = state
+        .inflight_by_api_id
+        .entry(api_id.to_string())
+        .or_insert(0);
+    *entry += 1;
+    AggregateApiInflightGuard {
+        api_id: api_id.to_string(),
+    }
+}
+
+fn aggregate_api_inflight_count(api_id: &str) -> usize {
+    let lock =
+        AGGREGATE_API_RUNTIME_STATE.get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+    let state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+    state.inflight_by_api_id.get(api_id).copied().unwrap_or(0)
+}
+
+fn aggregate_api_health_delta(status_code: u16) -> i32 {
+    match status_code {
+        200..=299 => 4,
+        429 => -15,
+        500..=599 => -10,
+        401 | 403 => -18,
+        400..=499 => -8,
+        _ => -2,
+    }
+}
+
+fn aggregate_api_quality_expired(record: &AggregateApiQualityRecord, now: i64) -> bool {
+    record.updated_at + AGGREGATE_API_HEALTH_TTL_SECS <= now
+}
+
+fn aggregate_api_health_score(api_id: &str) -> i32 {
+    let lock =
+        AGGREGATE_API_RUNTIME_STATE.get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+    let mut state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+    let now = now_ts();
+    let Some(record) = state.quality_by_api_id.get(api_id).cloned() else {
+        return DEFAULT_AGGREGATE_API_HEALTH_SCORE;
+    };
+    if aggregate_api_quality_expired(&record, now) {
+        state.quality_by_api_id.remove(api_id);
+        return DEFAULT_AGGREGATE_API_HEALTH_SCORE;
+    }
+    record.health_score.clamp(
+        MIN_AGGREGATE_API_HEALTH_SCORE,
+        MAX_AGGREGATE_API_HEALTH_SCORE,
+    )
+}
+
+fn record_aggregate_api_quality(api_id: &str, status_code: u16) {
+    let lock =
+        AGGREGATE_API_RUNTIME_STATE.get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+    let mut state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+    let now = now_ts();
+    let record = state
+        .quality_by_api_id
+        .entry(api_id.to_string())
+        .or_default();
+    if record.updated_at == 0 || aggregate_api_quality_expired(record, now) {
+        record.health_score = DEFAULT_AGGREGATE_API_HEALTH_SCORE;
+    }
+    record.updated_at = now;
+    record.health_score = (record.health_score + aggregate_api_health_delta(status_code)).clamp(
+        MIN_AGGREGATE_API_HEALTH_SCORE,
+        MAX_AGGREGATE_API_HEALTH_SCORE,
+    );
+}
+
+fn aggregate_api_last_test_bonus(last_test_status: Option<&str>) -> i32 {
+    match last_test_status
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("success") => 80,
+        Some("failed") => -AGGREGATE_API_COOLDOWN_PENALTY,
+        _ => 0,
+    }
+}
+
+fn aggregate_api_runtime_score(candidate: &AggregateApi) -> i32 {
+    aggregate_api_health_score(candidate.id.as_str()) * 4
+        + aggregate_api_last_test_bonus(candidate.last_test_status.as_deref())
+        - aggregate_api_inflight_count(candidate.id.as_str()) as i32
+            * AGGREGATE_API_INFLIGHT_PENALTY
+}
+
+fn next_aggregate_api_start_index(provider_type: &str, candidate_count: usize) -> usize {
+    let lock =
+        AGGREGATE_API_RUNTIME_STATE.get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+    let mut state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+    let entry = state
+        .next_start_by_provider
+        .entry(provider_type.to_string())
+        .or_insert(0);
+    let start = *entry % candidate_count;
+    *entry = (start + 1) % candidate_count;
+    start
+}
+
+fn smart_balance_aggregate_api_candidates(candidates: &mut [AggregateApi], provider_type: &str) {
+    if candidates.len() <= 1 {
+        return;
+    }
+
+    let start = next_aggregate_api_start_index(provider_type, candidates.len());
+    if start > 0 {
+        candidates.rotate_left(start);
+    }
+
+    let Some((best_idx, _)) =
+        candidates
+            .iter()
+            .enumerate()
+            .max_by(|(left_idx, left), (right_idx, right)| {
+                aggregate_api_runtime_score(left)
+                    .cmp(&aggregate_api_runtime_score(right))
+                    .then_with(|| right_idx.cmp(left_idx))
+            })
+    else {
+        return;
+    };
+    if best_idx > 0 {
+        candidates.swap(0, best_idx);
+    }
+}
+
+pub(super) fn clear_runtime_state() {
+    let lock =
+        AGGREGATE_API_RUNTIME_STATE.get_or_init(|| Mutex::new(AggregateApiRuntimeState::default()));
+    let mut state = crate::lock_utils::lock_recover(lock, "aggregate_api_runtime_state");
+    state.next_start_by_provider.clear();
+    state.inflight_by_api_id.clear();
+    state.quality_by_api_id.clear();
 }
 
 fn normalize_provider_type_value(value: &str) -> String {
@@ -185,6 +368,7 @@ pub(crate) fn resolve_aggregate_api_rotation_candidates(
         })
         .collect::<Vec<_>>();
     candidates = normalize_candidate_order(candidates);
+    let mut explicit_preferred = false;
 
     if let Some(api_id) = aggregate_api_id
         .map(str::trim)
@@ -196,7 +380,12 @@ pub(crate) fn resolve_aggregate_api_rotation_candidates(
         {
             candidates.retain(|api| api.id != preferred.id);
             candidates.insert(0, preferred);
+            explicit_preferred = true;
         }
+    }
+
+    if !explicit_preferred {
+        smart_balance_aggregate_api_candidates(&mut candidates, provider_type);
     }
 
     if candidates.is_empty() {
@@ -208,8 +397,22 @@ pub(crate) fn resolve_aggregate_api_rotation_candidates(
     }
 }
 
+pub(in super::super) struct AggregateProxyExhausted {
+    pub(in super::super) request: Request,
+    pub(in super::super) attempted_aggregate_api_ids: Vec<String>,
+    pub(in super::super) last_attempt_url: Option<String>,
+    pub(in super::super) last_attempt_supplier_name: Option<String>,
+    pub(in super::super) last_attempt_error: Option<String>,
+    pub(in super::super) last_failure_status: u16,
+}
+
+pub(in super::super) enum AggregateProxyResult {
+    Handled,
+    Exhausted(AggregateProxyExhausted),
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(in super::super) fn proxy_aggregate_request(
+pub(in super::super) fn try_proxy_aggregate_request(
     request: Request,
     storage: &Storage,
     trace_id: &str,
@@ -226,21 +429,78 @@ pub(in super::super) fn proxy_aggregate_request(
     aggregate_api_candidates: Vec<AggregateApi>,
     request_deadline: Option<Instant>,
     started_at: Instant,
-) -> Result<(), String> {
+    attempted_account_ids_for_log: Option<&[String]>,
+) -> Result<AggregateProxyResult, String> {
+    proxy_aggregate_request_with_policy(
+        request,
+        storage,
+        trace_id,
+        key_id,
+        original_path,
+        path,
+        request_method,
+        method,
+        body,
+        is_stream,
+        response_adapter,
+        model_for_log,
+        reasoning_for_log,
+        aggregate_api_candidates,
+        request_deadline,
+        started_at,
+        attempted_account_ids_for_log,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn proxy_aggregate_request_with_policy(
+    request: Request,
+    storage: &Storage,
+    trace_id: &str,
+    key_id: &str,
+    original_path: &str,
+    path: &str,
+    request_method: &str,
+    method: &reqwest::Method,
+    body: &Bytes,
+    is_stream: bool,
+    response_adapter: super::super::super::ResponseAdapter,
+    model_for_log: Option<&str>,
+    reasoning_for_log: Option<&str>,
+    aggregate_api_candidates: Vec<AggregateApi>,
+    request_deadline: Option<Instant>,
+    started_at: Instant,
+    attempted_account_ids_for_log: Option<&[String]>,
+    allow_fallback: bool,
+) -> Result<AggregateProxyResult, String> {
     if aggregate_api_candidates.is_empty() {
-        let message = "aggregate api not found".to_string();
-        super::super::super::record_gateway_request_outcome(path, 404, Some("aggregate_api"));
-        super::super::super::trace_log::log_request_final(
+        let exhausted = AggregateProxyExhausted {
+            request,
+            attempted_aggregate_api_ids: Vec::new(),
+            last_attempt_url: None,
+            last_attempt_supplier_name: None,
+            last_attempt_error: Some("aggregate api not found".to_string()),
+            last_failure_status: 404,
+        };
+        if allow_fallback {
+            return Ok(AggregateProxyResult::Exhausted(exhausted));
+        }
+        finalize_aggregate_proxy_exhausted(
+            exhausted,
+            storage,
             trace_id,
-            404,
-            Some(key_id),
-            None,
-            Some(message.as_str()),
-            started_at.elapsed().as_millis(),
-        );
-        let request = request;
-        respond_error(request, 404, message.as_str(), Some(trace_id));
-        return Ok(());
+            key_id,
+            original_path,
+            path,
+            request_method,
+            response_adapter,
+            model_for_log,
+            reasoning_for_log,
+            attempted_account_ids_for_log,
+            started_at,
+        )?;
+        return Ok(AggregateProxyResult::Handled);
     }
 
     let client = super::super::super::fresh_upstream_client();
@@ -264,6 +524,7 @@ pub(in super::super) fn proxy_aggregate_request(
             last_attempt_supplier_name = candidate_supplier_name.clone();
             last_attempt_error = Some("aggregate api secret not found".to_string());
             last_failure_status = 403;
+            record_aggregate_api_quality(candidate.id.as_str(), 403);
             continue;
         };
 
@@ -279,6 +540,7 @@ pub(in super::super) fn proxy_aggregate_request(
                     504,
                     Some("aggregate_api"),
                 );
+                record_aggregate_api_quality(candidate.id.as_str(), 504);
                 super::super::super::trace_log::log_request_final(
                     trace_id,
                     504,
@@ -287,7 +549,7 @@ pub(in super::super) fn proxy_aggregate_request(
                     Some(message.as_str()),
                     started_at.elapsed().as_millis(),
                 );
-                super::super::super::write_request_log(
+                super::super::super::request_log::write_request_log_with_attempts(
                     storage,
                     super::super::super::request_log::RequestLogTraceContext {
                         trace_id: Some(trace_id),
@@ -310,9 +572,10 @@ pub(in super::super) fn proxy_aggregate_request(
                     RequestLogUsage::default(),
                     Some(message.as_str()),
                     Some(started_at.elapsed().as_millis()),
+                    attempted_account_ids_for_log,
                 );
                 respond_error(request, 504, message.as_str(), Some(trace_id));
-                return Ok(());
+                return Ok(AggregateProxyResult::Handled);
             }
 
             let attempt_urls = match aggregate_api_attempt_urls(candidate_url.as_str(), path) {
@@ -337,6 +600,8 @@ pub(in super::super) fn proxy_aggregate_request(
                     request_deadline,
                     is_stream,
                 )?;
+                let mut aggregate_inflight_guard =
+                    Some(acquire_aggregate_api_inflight(candidate.id.as_str()));
 
                 let attempt_started_at = Instant::now();
                 let upstream = match builder.send() {
@@ -361,6 +626,7 @@ pub(in super::super) fn proxy_aggregate_request(
                         last_attempt_supplier_name = candidate_supplier_name.clone();
                         last_attempt_error = Some(message);
                         last_failure_status = 502;
+                        record_aggregate_api_quality(candidate.id.as_str(), 502);
                         if url_idx + 1 < total_attempt_urls {
                             continue;
                         }
@@ -401,6 +667,7 @@ pub(in super::super) fn proxy_aggregate_request(
                     last_attempt_supplier_name = candidate_supplier_name.clone();
                     last_attempt_error = Some(message);
                     last_failure_status = 502;
+                    record_aggregate_api_quality(candidate.id.as_str(), status_code);
                     if url_idx + 1 < total_attempt_urls
                         && should_retry_unversioned_aggregate_api_url(status_code)
                     {
@@ -412,6 +679,9 @@ pub(in super::super) fn proxy_aggregate_request(
                     break 'attempts;
                 }
 
+                let _aggregate_inflight_guard = aggregate_inflight_guard
+                    .take()
+                    .expect("aggregate inflight guard should exist");
                 let inflight_guard = super::super::super::acquire_account_inflight(key_id);
                 let bridge = super::super::super::respond_with_upstream(
                     request
@@ -424,7 +694,11 @@ pub(in super::super) fn proxy_aggregate_request(
                     None,
                     is_stream,
                     Some(trace_id),
-                )?;
+                )
+                .map_err(|err| {
+                    record_aggregate_api_quality(candidate.id.as_str(), 502);
+                    err
+                })?;
                 let bridge_output_text_len = bridge
                     .usage
                     .output_text
@@ -467,6 +741,7 @@ pub(in super::super) fn proxy_aggregate_request(
                 } else {
                     status_code
                 };
+                record_aggregate_api_quality(candidate.id.as_str(), status_code);
                 let usage = bridge.usage;
 
                 super::super::super::record_gateway_request_outcome(
@@ -482,7 +757,7 @@ pub(in super::super) fn proxy_aggregate_request(
                     final_error.as_deref(),
                     started_at.elapsed().as_millis(),
                 );
-                super::super::super::write_request_log(
+                super::super::super::request_log::write_request_log_with_attempts(
                     storage,
                     super::super::super::request_log::RequestLogTraceContext {
                         trace_id: Some(trace_id),
@@ -511,6 +786,7 @@ pub(in super::super) fn proxy_aggregate_request(
                     },
                     final_error.as_deref(),
                     Some(started_at.elapsed().as_millis()),
+                    attempted_account_ids_for_log,
                 );
                 succeeded = true;
                 break 'attempts;
@@ -518,7 +794,7 @@ pub(in super::super) fn proxy_aggregate_request(
         }
 
         if succeeded {
-            return Ok(());
+            return Ok(AggregateProxyResult::Handled);
         }
 
         if candidate_idx + 1 < total_candidates {
@@ -526,31 +802,76 @@ pub(in super::super) fn proxy_aggregate_request(
         }
     }
 
-    let message =
-        last_attempt_error.unwrap_or_else(|| "aggregate api upstream response failed".to_string());
-    let status_code = last_failure_status;
-    let request = request
-        .take()
-        .expect("request should still be available for failure response");
+    let exhausted = AggregateProxyExhausted {
+        request: request
+            .take()
+            .expect("request should still be available for failure response"),
+        attempted_aggregate_api_ids,
+        last_attempt_url,
+        last_attempt_supplier_name,
+        last_attempt_error,
+        last_failure_status,
+    };
+    if allow_fallback {
+        Ok(AggregateProxyResult::Exhausted(exhausted))
+    } else {
+        finalize_aggregate_proxy_exhausted(
+            exhausted,
+            storage,
+            trace_id,
+            key_id,
+            original_path,
+            path,
+            request_method,
+            response_adapter,
+            model_for_log,
+            reasoning_for_log,
+            attempted_account_ids_for_log,
+            started_at,
+        )?;
+        Ok(AggregateProxyResult::Handled)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finalize_aggregate_proxy_exhausted(
+    exhausted: AggregateProxyExhausted,
+    storage: &Storage,
+    trace_id: &str,
+    key_id: &str,
+    original_path: &str,
+    path: &str,
+    request_method: &str,
+    response_adapter: super::super::super::ResponseAdapter,
+    model_for_log: Option<&str>,
+    reasoning_for_log: Option<&str>,
+    attempted_account_ids_for_log: Option<&[String]>,
+    started_at: Instant,
+) -> Result<(), String> {
+    let message = exhausted
+        .last_attempt_error
+        .clone()
+        .unwrap_or_else(|| "aggregate api upstream response failed".to_string());
+    let status_code = exhausted.last_failure_status;
     super::super::super::record_gateway_request_outcome(path, status_code, Some("aggregate_api"));
     super::super::super::trace_log::log_request_final(
         trace_id,
         status_code,
         Some(key_id),
-        last_attempt_url.as_deref(),
+        exhausted.last_attempt_url.as_deref(),
         Some(message.as_str()),
         started_at.elapsed().as_millis(),
     );
-    super::super::super::write_request_log(
+    super::super::super::request_log::write_request_log_with_attempts(
         storage,
         super::super::super::request_log::RequestLogTraceContext {
             trace_id: Some(trace_id),
             original_path: Some(original_path),
             adapted_path: Some(path),
             response_adapter: Some(response_adapter),
-            aggregate_api_supplier_name: last_attempt_supplier_name.as_deref(),
-            aggregate_api_url: last_attempt_url.as_deref(),
-            attempted_aggregate_api_ids: Some(attempted_aggregate_api_ids.as_slice()),
+            aggregate_api_supplier_name: exhausted.last_attempt_supplier_name.as_deref(),
+            aggregate_api_url: exhausted.last_attempt_url.as_deref(),
+            attempted_aggregate_api_ids: Some(exhausted.attempted_aggregate_api_ids.as_slice()),
             ..Default::default()
         },
         Some(key_id),
@@ -559,19 +880,39 @@ pub(in super::super) fn proxy_aggregate_request(
         request_method,
         model_for_log,
         reasoning_for_log,
-        last_attempt_url.as_deref(),
+        exhausted.last_attempt_url.as_deref(),
         Some(status_code),
         RequestLogUsage::default(),
         Some(message.as_str()),
         Some(started_at.elapsed().as_millis()),
+        attempted_account_ids_for_log,
     );
-    respond_error(request, status_code, message.as_str(), Some(trace_id));
+    respond_error(
+        exhausted.request,
+        status_code,
+        message.as_str(),
+        Some(trace_id),
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{aggregate_api_attempt_urls, should_retry_unversioned_aggregate_api_url};
+    use super::{
+        acquire_aggregate_api_inflight, aggregate_api_attempt_urls, clear_runtime_state,
+        record_aggregate_api_quality, resolve_aggregate_api_rotation_candidates,
+        should_retry_unversioned_aggregate_api_url,
+    };
+    use codexmanager_core::storage::{now_ts, AggregateApi, Storage};
+    use std::sync::{Mutex, OnceLock};
+
+    fn aggregate_api_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static AGGREGATE_API_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+        AGGREGATE_API_TEST_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     #[test]
     fn final_error_promotes_success_status_to_bad_gateway() {
@@ -616,6 +957,92 @@ mod tests {
         assert!(should_retry_unversioned_aggregate_api_url(404));
         assert!(!should_retry_unversioned_aggregate_api_url(401));
         assert!(!should_retry_unversioned_aggregate_api_url(429));
+    }
+
+    #[test]
+    fn aggregate_api_candidates_round_robin_when_runtime_scores_are_equal() {
+        let _guard = aggregate_api_test_guard();
+        clear_runtime_state();
+        let storage = Storage::open_in_memory().expect("open");
+        storage.init().expect("init");
+        let now = now_ts();
+        for (idx, id) in ["agg-a", "agg-b", "agg-c"].into_iter().enumerate() {
+            storage
+                .insert_aggregate_api(&AggregateApi {
+                    id: id.to_string(),
+                    provider_type: "codex".to_string(),
+                    supplier_name: Some(id.to_string()),
+                    sort: idx as i64,
+                    url: format!("https://example.com/{id}"),
+                    status: "active".to_string(),
+                    created_at: now + idx as i64,
+                    updated_at: now + idx as i64,
+                    last_test_at: None,
+                    last_test_status: None,
+                    last_test_error: None,
+                })
+                .expect("insert aggregate api");
+        }
+
+        let first = resolve_aggregate_api_rotation_candidates(&storage, "openai_compat", None)
+            .expect("first candidates");
+        let second = resolve_aggregate_api_rotation_candidates(&storage, "openai_compat", None)
+            .expect("second candidates");
+        let third = resolve_aggregate_api_rotation_candidates(&storage, "openai_compat", None)
+            .expect("third candidates");
+
+        assert_eq!(first[0].id, "agg-a");
+        assert_eq!(second[0].id, "agg-b");
+        assert_eq!(third[0].id, "agg-c");
+    }
+
+    #[test]
+    fn aggregate_api_candidates_prefer_healthier_and_less_busy_entries() {
+        let _guard = aggregate_api_test_guard();
+        clear_runtime_state();
+        let storage = Storage::open_in_memory().expect("open");
+        storage.init().expect("init");
+        let now = now_ts();
+        storage
+            .insert_aggregate_api(&AggregateApi {
+                id: "agg-busy".to_string(),
+                provider_type: "codex".to_string(),
+                supplier_name: Some("busy".to_string()),
+                sort: 0,
+                url: "https://example.com/busy".to_string(),
+                status: "active".to_string(),
+                created_at: now,
+                updated_at: now,
+                last_test_at: None,
+                last_test_status: Some("failed".to_string()),
+                last_test_error: None,
+            })
+            .expect("insert busy aggregate api");
+        storage
+            .insert_aggregate_api(&AggregateApi {
+                id: "agg-healthy".to_string(),
+                provider_type: "codex".to_string(),
+                supplier_name: Some("healthy".to_string()),
+                sort: 1,
+                url: "https://example.com/healthy".to_string(),
+                status: "active".to_string(),
+                created_at: now + 1,
+                updated_at: now + 1,
+                last_test_at: None,
+                last_test_status: Some("success".to_string()),
+                last_test_error: None,
+            })
+            .expect("insert healthy aggregate api");
+
+        for _ in 0..4 {
+            record_aggregate_api_quality("agg-busy", 429);
+            record_aggregate_api_quality("agg-healthy", 200);
+        }
+        let _busy_guard = acquire_aggregate_api_inflight("agg-busy");
+
+        let candidates = resolve_aggregate_api_rotation_candidates(&storage, "openai_compat", None)
+            .expect("candidates");
+        assert_eq!(candidates[0].id, "agg-healthy");
     }
 
     fn bridge_status_code(

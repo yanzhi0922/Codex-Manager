@@ -10,10 +10,10 @@ pub(in super::super) struct GatewayUpstreamExecutionContext<'a> {
     request_method: &'a str,
     response_adapter: super::super::super::ResponseAdapter,
     protocol_type: &'a str,
-    model_for_log: Option<&'a str>,
     reasoning_for_log: Option<&'a str>,
     candidate_count: usize,
     account_max_inflight: usize,
+    attempted_aggregate_api_ids: Option<&'a [String]>,
 }
 
 impl<'a> GatewayUpstreamExecutionContext<'a> {
@@ -27,10 +27,10 @@ impl<'a> GatewayUpstreamExecutionContext<'a> {
         request_method: &'a str,
         response_adapter: super::super::super::ResponseAdapter,
         protocol_type: &'a str,
-        model_for_log: Option<&'a str>,
         reasoning_for_log: Option<&'a str>,
         candidate_count: usize,
         account_max_inflight: usize,
+        attempted_aggregate_api_ids: Option<&'a [String]>,
     ) -> Self {
         Self {
             trace_id,
@@ -41,10 +41,10 @@ impl<'a> GatewayUpstreamExecutionContext<'a> {
             request_method,
             response_adapter,
             protocol_type,
-            model_for_log,
             reasoning_for_log,
             candidate_count,
             account_max_inflight,
+            attempted_aggregate_api_ids,
         }
     }
 
@@ -127,28 +127,6 @@ impl<'a> GatewayUpstreamExecutionContext<'a> {
         )
     }
 
-    pub(in super::super) fn log_final_result(
-        &self,
-        final_account_id: Option<&str>,
-        upstream_url: Option<&str>,
-        status_code: u16,
-        usage: super::super::super::request_log::RequestLogUsage,
-        error: Option<&str>,
-        elapsed_ms: u128,
-        attempted_account_ids: Option<&[String]>,
-    ) {
-        self.log_final_result_with_model(
-            final_account_id,
-            upstream_url,
-            self.model_for_log,
-            status_code,
-            usage,
-            error,
-            elapsed_ms,
-            attempted_account_ids,
-        );
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(in super::super) fn log_final_result_with_model(
         &self,
@@ -168,6 +146,7 @@ impl<'a> GatewayUpstreamExecutionContext<'a> {
                 original_path: Some(self.original_path),
                 adapted_path: Some(self.path),
                 response_adapter: Some(self.response_adapter),
+                attempted_aggregate_api_ids: self.attempted_aggregate_api_ids,
                 ..Default::default()
             },
             Some(self.key_id),
