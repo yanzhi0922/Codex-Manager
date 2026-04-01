@@ -5,9 +5,15 @@
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-04-02
+
+### Fixed
+- 桌面端自更新默认仓库、设置页 Release 链接、Docker release compose 默认镜像仓库统一切换到 `yanzhi0922/Codex-Manager` / `ghcr.io/yanzhi0922`，避免 fork 发版后仍误指向上游仓库。
+
 ### Changed
 - 网关候选选择新增“智能负载均衡”：账号池会综合额度余量、当前并发与冷却状态做动态排序；聚合 API 池会在池内 round-robin 的基础上叠加运行期健康分、并发占用和最近测试结果。
 - 跨池回退语义保持不变：`账号优先 / 聚合优先` 仍只会在当前优先池整体不可用或耗尽后，才切到另一池。
+- 发布版本提升到 `0.1.15`，同步更新 workspace、前端包、Tauri 桌面端、Docker release 配置、版本一致性测试脚本与 README 版本说明。
 
 ## [0.1.14] - 2026-03-28
 
@@ -163,8 +169,9 @@
 ### Changed
 - 账号管理页操作区整合为单一“账号操作”下拉菜单，替代右侧多按钮堆叠，界面更简洁。
 
-[Unreleased]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.14...HEAD
-[0.1.14]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.14
+[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.15
+[0.1.14]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.14
 [0.1.13]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.13
 [0.1.12]: https://github.com/qxcnm/Codex-Manager/releases/tag/v0.1.12
 [0.1.11]: https://github.com/qxcnm/Codex-Manager/compare/v0.1.10...v0.1.11

@@ -343,7 +343,7 @@ function handleRpc(state, method, params) {
     case "initialize":
       return {
         serverName: "codexmanager-service",
-        version: "0.1.14-mock",
+        version: "0.1.15-mock",
         userAgent: "codexmanager-web-ui-smoke",
       };
     case "startup/snapshot":

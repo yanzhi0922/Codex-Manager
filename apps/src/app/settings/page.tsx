@@ -279,7 +279,7 @@ function normalizeUpdateStatusSummary(payload: unknown): UpdateStatusSummary {
 
 function buildReleaseUrl(summary: UpdateCheckSummary | null): string {
   if (!summary?.repo) {
-    return "https://github.com/qxcnm/Codex-Manager/releases";
+    return "https://github.com/yanzhi0922/Codex-Manager/releases";
   }
   const normalizedTag =
     summary.releaseTag ||

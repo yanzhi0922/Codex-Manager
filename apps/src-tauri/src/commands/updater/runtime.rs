@@ -3,7 +3,7 @@ use semver::Version;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub(super) const DEFAULT_UPDATE_REPO: &str = "qxcnm/Codex-Manager";
+pub(super) const DEFAULT_UPDATE_REPO: &str = "yanzhi0922/Codex-Manager";
 pub(super) const PORTABLE_MARKER_FILE: &str = ".codexmanager-portable";
 pub(super) const USER_AGENT: &str = "CodexManager-Updater";
 

@@ -43,7 +43,7 @@ try {
   "id": 1,
   "result": {
     "serverName": "codexmanager-service",
-    "version": "0.1.14"
+    "version": "0.1.15"
   }
 }
 "@
