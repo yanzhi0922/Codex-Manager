@@ -46,7 +46,9 @@
 | 本地构建、打包、发版、脚本调用 | [构建发布与脚本说明](docs/release/20260310122606851_构建发布与脚本说明.md) |
 
 ## 最近变更
-- 当前最新版本：`v0.1.16`（2026-04-02）
+- 当前最新版本：`v0.1.17`（2026-04-02）
+- GitHub Actions 发布链路已把 `pnpm/action-setup` 升到 `v5`、`docker/login-action` 升到 `v4`，现在直接使用官方 Node 24 运行时，不再依赖 Node 20 兼容强制开关。
+- GitHub Release 正文现在会优先从 `CHANGELOG.md` 自动提取当前版本段落，后续发版不再只有默认生成的 compare 链接。
 - 发布链路新增硬门：workflow 会先校验 workspace / 前端包 / Tauri 版本一致性，并拒绝 `tag` / `ref` 指向不同 commit 的组合，避免错误 commit 被挂到正式 tag 上。
 - 本地 `rebuild` 脚本已与 CI 打包链路完全对齐，统一走 `pnpm --dir apps dlx @tauri-apps/cli@2.10.1 build`，不再依赖本机额外安装 `cargo tauri`。
 - 新增“智能负载均衡”：账号池现在会综合额度余量、当前并发和冷却状态动态排序；聚合 API 池会在池内 round-robin 的基础上叠加运行期健康分、并发占用和最近测试结果。
@@ -61,7 +63,7 @@
 - 平台密钥新增服务等级配置：`跟随请求`、`Fast`、`Flex`。其中 `Fast` 会映射为上游 `priority`，`Flex` 会直传为 `flex`；桌面端创建 / 编辑链路也已修正，现在能正常保存与回显。
 - 设置页补回了服务监听切换，支持在 `localhost` 与 `0.0.0.0` 之间切换；“检查更新”按钮现在只会在手动点击时显示加载状态，不会再被静默自动检查误触发。
 - Web / 桌面交互层也做了补丁修复：Web 非首页刷新不再误下载文件，复制 API Key / 登录链接在缺少 `navigator.clipboard.writeText` 的环境下也会自动降级复制。
-- 发布链路继续统一收口：版本已提升到 `0.1.16`，workspace、前端包、Tauri 桌面端、版本一致性校验脚本和 README 版本说明已同步对齐。完整历史请看 [CHANGELOG.md](CHANGELOG.md)。
+- 发布链路继续统一收口：版本已提升到 `0.1.17`，workspace、前端包、Tauri 桌面端、版本一致性校验脚本和 README 版本说明已同步对齐。完整历史请看 [CHANGELOG.md](CHANGELOG.md)。
 
 ### 近期提交摘要
 - `cb990a1`：完善账号清理入口与文档收口。账号操作菜单补齐封禁清理入口与数量展示，README / 文档入口同步收紧到当前主线路径。

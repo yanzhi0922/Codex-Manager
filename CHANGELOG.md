@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-04-02
+
+### Fixed
+- GitHub Actions 发布链路不再依赖 Node 20 兼容强制开关：`pnpm/action-setup` 已升级到 `v5`，`docker/login-action` 已升级到 `v4`，release workflow 现在直接运行在官方 Node 24 运行时上。
+
+### Changed
+- GitHub Release 发布正文改为优先从 `CHANGELOG.md` 提取当前版本段落，不再只依赖 `--generate-notes`；后续每次发版都会自动带上可直接对外展示的变更说明。
+- 发布版本提升到 `0.1.17`，同步更新 workspace、前端包、Tauri 桌面端、锁文件、README 与发布文档中的最新版本说明。
+
 ## [0.1.16] - 2026-04-02
 
 ### Fixed
@@ -180,7 +189,8 @@
 ### Changed
 - 账号管理页操作区整合为单一“账号操作”下拉菜单，替代右侧多按钮堆叠，界面更简洁。
 
-[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.17
 [0.1.16]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.16
 [0.1.15]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.15
 [0.1.14]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.14
