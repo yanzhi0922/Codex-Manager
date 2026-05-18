@@ -10,6 +10,7 @@ import DashboardPage from "@/app/page";
 import AccountsPage from "@/app/accounts/page";
 import AggregateApiPage from "@/app/aggregate-api/page";
 import ApiKeysPage from "@/app/apikeys/page";
+import SessionsPage from "@/app/sessions/page";
 import LogsPage from "@/app/logs/page";
 import SettingsPage from "@/app/settings/page";
 
@@ -18,6 +19,7 @@ const PAGE_COMPONENTS: Record<RootPagePath, ComponentType> = {
   "/accounts": AccountsPage,
   "/aggregate-api": AggregateApiPage,
   "/apikeys": ApiKeysPage,
+  "/sessions": SessionsPage,
   "/logs": LogsPage,
   "/settings": SettingsPage,
 };

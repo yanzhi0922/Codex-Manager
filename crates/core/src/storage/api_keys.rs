@@ -1,6 +1,6 @@
 use rusqlite::{Result, Row};
 
-use super::{now_ts, ApiKey, Storage};
+use super::{now_ts, ApiKey, ApiKeyProfileConfig, Storage};
 
 const API_KEY_SELECT_SQL: &str = "SELECT
     k.id,
@@ -209,12 +209,7 @@ impl Storage {
     pub fn update_api_key_profile_config(
         &self,
         key_id: &str,
-        client_type: &str,
-        protocol_type: &str,
-        auth_scheme: &str,
-        upstream_base_url: Option<&str>,
-        static_headers_json: Option<&str>,
-        service_tier: Option<&str>,
+        config: ApiKeyProfileConfig<'_>,
     ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO api_key_profiles (
@@ -254,12 +249,12 @@ impl Storage {
                 updated_at = excluded.updated_at",
             (
                 key_id,
-                client_type,
-                protocol_type,
-                auth_scheme,
-                upstream_base_url,
-                static_headers_json,
-                service_tier,
+                config.client_type,
+                config.protocol_type,
+                config.auth_scheme,
+                config.upstream_base_url,
+                config.static_headers_json,
+                config.service_tier,
                 now_ts(),
             ),
         )?;

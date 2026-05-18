@@ -12,8 +12,8 @@ import {
 } from "@/lib/appearance";
 
 export const metadata: Metadata = {
-  title: "CodexManager",
-  description: "Account pool and usage management for Codex",
+  title: "Codex-Copilot",
+  description: "Unified account pool, gateway, and session management for Codex",
 };
 
 export default function RootLayout({

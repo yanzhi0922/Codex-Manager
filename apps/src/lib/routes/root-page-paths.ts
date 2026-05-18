@@ -3,6 +3,7 @@ export const ROOT_PAGE_PATHS = [
   "/accounts",
   "/aggregate-api",
   "/apikeys",
+  "/sessions",
   "/logs",
   "/settings",
 ] as const;

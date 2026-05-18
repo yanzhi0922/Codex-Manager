@@ -117,15 +117,7 @@ impl CandidateExecutionState {
                     })
                     .clone();
             }
-            if self.stripped_body.is_none() {
-                self.stripped_body = strip_encrypted_content_from_body(rewritten.as_ref())
-                    .map(Bytes::from)
-                    .or_else(|| Some(rewritten.clone()));
-            }
-            self.stripped_body
-                .as_ref()
-                .expect("stripped body should be initialized")
-                .clone()
+            self.ensure_stripped_body(&rewritten)
         } else {
             rewritten
         }
@@ -153,18 +145,22 @@ impl CandidateExecutionState {
                     })
                     .clone();
             }
-            if self.stripped_body.is_none() {
-                self.stripped_body = strip_encrypted_content_from_body(rewritten.as_ref())
-                    .map(Bytes::from)
-                    .or_else(|| Some(rewritten.clone()));
-            }
-            self.stripped_body
-                .as_ref()
-                .expect("stripped body should be initialized")
-                .clone()
+            self.ensure_stripped_body(&rewritten)
         } else {
             rewritten
         }
+    }
+
+    fn ensure_stripped_body(&mut self, rewritten: &Bytes) -> Bytes {
+        if self.stripped_body.is_none() {
+            self.stripped_body = strip_encrypted_content_from_body(rewritten.as_ref())
+                .map(Bytes::from)
+                .or_else(|| Some(rewritten.clone()));
+        }
+        self.stripped_body
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| rewritten.clone())
     }
 }
 

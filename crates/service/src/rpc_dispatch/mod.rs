@@ -12,6 +12,7 @@ mod app_settings;
 mod gateway;
 mod requestlog;
 mod service_config;
+mod session;
 mod startup;
 mod usage;
 
@@ -110,6 +111,9 @@ pub(crate) fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         return resp;
     }
     if let Some(resp) = requestlog::try_handle(&req) {
+        return resp;
+    }
+    if let Some(resp) = session::try_handle(&req) {
         return resp;
     }
 

@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-tests:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup release environment
+        uses: ./.github/actions/setup-release-env
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Rust tests
+        run: cargo test --workspace
+
+  frontend-checks:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup release environment
+        uses: ./.github/actions/setup-release-env
+
+      - name: Install frontend dependencies
+        working-directory: apps
+        run: pnpm install --frozen-lockfile
+
+      - name: Run frontend lint
+        working-directory: apps
+        run: pnpm run lint
+
+      - name: Build frontend
+        working-directory: apps
+        run: pnpm run build:desktop
+
+      - name: Run runtime capability tests
+        working-directory: apps
+        run: pnpm run test:runtime

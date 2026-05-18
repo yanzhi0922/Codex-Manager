@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 #[cfg(test)]
 use std::collections::HashMap;
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
@@ -18,14 +19,14 @@ thread_local! {
 
 pub(crate) struct StorageHandle {
     path: String,
-    storage: Option<Storage>,
+    storage: ManuallyDrop<Storage>,
 }
 
 impl StorageHandle {
     fn new(path: String, storage: Storage) -> Self {
         Self {
             path,
-            storage: Some(storage),
+            storage: ManuallyDrop::new(storage),
         }
     }
 }
@@ -34,21 +35,23 @@ impl Deref for StorageHandle {
     type Target = Storage;
 
     fn deref(&self) -> &Self::Target {
-        self.storage.as_ref().expect("storage handle should exist")
+        &self.storage
     }
 }
 
 impl DerefMut for StorageHandle {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.storage.as_mut().expect("storage handle should exist")
+        &mut self.storage
     }
 }
 
 impl Drop for StorageHandle {
     fn drop(&mut self) {
-        let Some(storage) = self.storage.take() else {
-            return;
-        };
+        // SAFETY:
+        // `storage` is initialized exactly once in `new`, and this is the only
+        // location where it is moved out (during `Drop`). No code reads the
+        // field after this point.
+        let storage = unsafe { ManuallyDrop::take(&mut self.storage) };
         let path = self.path.clone();
         STORAGE_CACHE.with(|cell| {
             let mut cache = cell.borrow_mut();
@@ -163,14 +166,14 @@ pub(crate) fn open_storage() -> Option<StorageHandle> {
 }
 
 fn open_storage_at_path(path: &str) -> Option<StorageHandle> {
-    if let Some(storage) = take_cached_storage(&path) {
+    if let Some(storage) = take_cached_storage(path) {
         return Some(StorageHandle::new(path.to_string(), storage));
     }
 
-    if !Path::new(&path).exists() {
+    if !Path::new(path).exists() {
         log::warn!("storage path missing: {}", path);
     }
-    let storage = match Storage::open(&path) {
+    let storage = match Storage::open(path) {
         Ok(storage) => storage,
         Err(err) => {
             log::error!("open storage failed: {} ({})", path, err);

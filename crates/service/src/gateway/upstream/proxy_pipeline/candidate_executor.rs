@@ -101,7 +101,7 @@ pub(in super::super) fn execute_candidate_sequence(
         if deadline::is_expired(request_deadline) {
             let request = request
                 .take()
-                .expect("request should be available before timeout response");
+                .ok_or_else(|| "request missing before timeout response".to_string())?;
             respond_total_timeout(
                 request,
                 context,
@@ -215,7 +215,7 @@ pub(in super::super) fn execute_candidate_sequence(
             } => {
                 let request = request
                     .take()
-                    .expect("request should be available before terminal response");
+                    .ok_or_else(|| "request missing before terminal response".to_string())?;
                 finalize_terminal_candidate(
                     request,
                     context,
@@ -279,9 +279,9 @@ pub(in super::super) fn execute_candidate_sequence(
                             status_code,
                             message,
                         } => {
-                            let request = request
-                                .take()
-                                .expect("request should be available before terminal response");
+                            let request = request.take().ok_or_else(|| {
+                                "request missing before terminal response".to_string()
+                            })?;
                             finalize_terminal_candidate(
                                 request,
                                 context,
@@ -300,10 +300,10 @@ pub(in super::super) fn execute_candidate_sequence(
                 }
                 let request = request
                     .take()
-                    .expect("request should be available before terminal response");
+                    .ok_or_else(|| "request missing before upstream response".to_string())?;
                 let guard = inflight_guard
                     .take()
-                    .expect("inflight guard should be available before terminal response");
+                    .ok_or_else(|| "inflight guard missing before upstream response".to_string())?;
                 if let Err(err) = super::super::super::conversation_binding::record_conversation_binding_terminal_response(
                     storage,
                     setup.conversation_routing.as_ref(),
@@ -342,7 +342,7 @@ pub(in super::super) fn execute_candidate_sequence(
 
     Ok(CandidateExecutionResult::Exhausted {
         request: request
-            .expect("request should still exist when no candidate handled the response"),
+            .ok_or_else(|| "request missing when no candidate handled the response".to_string())?,
         attempted_account_ids,
         skipped_cooldown,
         skipped_inflight,

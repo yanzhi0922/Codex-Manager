@@ -5,6 +5,7 @@ pub mod login;
 mod registry;
 pub mod requestlog;
 pub mod service;
+pub mod session;
 pub mod settings;
 pub mod shared;
 pub mod startup;

@@ -395,6 +395,294 @@ pub struct StartupSnapshotResult {
     pub request_logs: Vec<RequestLogSummary>,
 }
 
+// ── Session management types ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionProviderSummary {
+    pub name: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionListItem {
+    pub id: String,
+    pub file_path: String,
+    pub relative_path: String,
+    pub provider: String,
+    pub source: String,
+    pub timestamp: Option<String>,
+    pub timestamp_display: String,
+    pub cwd: Option<String>,
+    pub originator: Option<String>,
+    pub cli_version: Option<String>,
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub recent_prompts: Vec<String>,
+    pub size: u64,
+    pub size_display: String,
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SessionListParams {
+    pub page: i64,
+    pub page_size: i64,
+    pub query: Option<String>,
+    pub provider: Option<String>,
+    pub include_preview: bool,
+}
+
+impl Default for SessionListParams {
+    fn default() -> Self {
+        Self {
+            page: 1,
+            page_size: 20,
+            query: None,
+            provider: None,
+            include_preview: false,
+        }
+    }
+}
+
+impl SessionListParams {
+    pub fn normalized(self) -> Self {
+        Self {
+            page: if self.page < 1 { 1 } else { self.page },
+            page_size: if self.page_size < 1 || self.page_size > 200 {
+                20
+            } else {
+                self.page_size
+            },
+            query: self.query,
+            provider: self.provider,
+            include_preview: self.include_preview,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionListTotals {
+    pub all: i64,
+    pub filtered: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionListResult {
+    #[serde(default)]
+    pub items: Vec<SessionListItem>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+    pub sessions_dir: String,
+    #[serde(default)]
+    pub providers: Vec<SessionProviderSummary>,
+    pub totals: SessionListTotals,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionOverviewTotals {
+    pub sessions: i64,
+    pub providers: i64,
+    pub backups: i64,
+    pub bytes: u64,
+    pub bytes_display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionOverviewResult {
+    pub sessions_dir: String,
+    pub totals: SessionOverviewTotals,
+    #[serde(default)]
+    pub providers: Vec<SessionProviderSummary>,
+    pub latest_session_at: Option<String>,
+    pub latest_session_at_display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDashboardResult {
+    pub overview: SessionOverviewResult,
+    pub sessions: SessionListResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDetailResult {
+    pub id: String,
+    pub file_path: String,
+    pub relative_path: String,
+    pub provider: String,
+    pub source: String,
+    pub timestamp: Option<String>,
+    pub timestamp_display: String,
+    pub cwd: Option<String>,
+    pub originator: Option<String>,
+    pub cli_version: Option<String>,
+    pub size: u64,
+    pub size_display: String,
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub recent_prompts: Vec<String>,
+    pub latest_cwd: Option<String>,
+    pub latest_model: Option<String>,
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDoctorIssue {
+    pub severity: String,
+    pub issue_type: String,
+    pub relative_path: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDoctorSummary {
+    pub total_files: i64,
+    pub invalid_meta_count: i64,
+    pub missing_provider_count: i64,
+    pub missing_workspace_count: i64,
+    pub workspace_ready_count: i64,
+    pub duplicate_id_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDoctorResult {
+    pub ok: bool,
+    pub sessions_dir: String,
+    pub summary: SessionDoctorSummary,
+    #[serde(default)]
+    pub issues: Vec<SessionDoctorIssue>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SessionSelection {
+    pub file_paths: Vec<String>,
+    pub ids: Vec<String>,
+    pub provider: Option<String>,
+    pub query: Option<String>,
+    pub limit: Option<i64>,
+    pub allow_all: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMigrationPreviewItem {
+    pub id: String,
+    pub file_path: String,
+    pub relative_path: String,
+    pub timestamp: Option<String>,
+    pub timestamp_display: String,
+    pub cwd: Option<String>,
+    pub preview: Option<String>,
+    pub from: String,
+    pub from_source: String,
+    pub to: String,
+    pub to_source: String,
+    pub skipped: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMigrationPreviewResult {
+    pub sessions_dir: String,
+    pub target_provider: String,
+    pub target_source: String,
+    pub total_selected: i64,
+    pub actionable: i64,
+    pub skipped: i64,
+    #[serde(default)]
+    pub items: Vec<SessionMigrationPreviewItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionActionError {
+    pub file_path: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMigrationResult {
+    pub ok: bool,
+    pub dry_run: bool,
+    pub sessions_dir: String,
+    pub target_provider: String,
+    pub target_source: String,
+    pub backup_id: Option<String>,
+    pub backup_dir: Option<String>,
+    pub total_selected: i64,
+    pub migrated: i64,
+    pub skipped: i64,
+    #[serde(default)]
+    pub errors: Vec<SessionActionError>,
+    #[serde(default)]
+    pub items: Vec<SessionMigrationPreviewItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionBackupSummary {
+    pub backup_id: String,
+    pub backup_dir: String,
+    pub created_at: String,
+    pub label: String,
+    pub reason: Option<String>,
+    pub source_provider: Option<String>,
+    pub target_provider: Option<String>,
+    pub entry_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionBackupListResult {
+    pub sessions_dir: String,
+    #[serde(default)]
+    pub backups: Vec<SessionBackupSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionExportResult {
+    pub ok: bool,
+    pub sessions_dir: String,
+    pub format: String,
+    pub file_name: String,
+    pub file_path: String,
+    pub mime_type: String,
+    pub content: String,
+    pub session_count: i64,
+    pub exported_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRepairResult {
+    pub ok: bool,
+    pub sessions_dir: String,
+    pub session_index_path: String,
+    pub session_index_backup_path: Option<String>,
+    pub total_sessions: i64,
+    pub written_entries: i64,
+    pub state_database_count: i64,
+    pub threads_inserted: i64,
+    pub threads_updated: i64,
+    #[serde(default)]
+    pub issues: Vec<SessionDoctorIssue>,
+}
+
 #[cfg(test)]
 #[path = "tests/types_tests.rs"]
 mod tests;

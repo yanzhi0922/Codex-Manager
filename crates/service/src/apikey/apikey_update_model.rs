@@ -5,6 +5,7 @@ use crate::apikey_profile::{
 };
 use crate::reasoning_effort::normalize_reasoning_effort;
 use crate::storage_helpers::open_storage;
+use codexmanager_core::storage::ApiKeyProfileConfig;
 
 pub(crate) fn update_api_key_model(
     key_id: &str,
@@ -92,14 +93,16 @@ pub(crate) fn update_api_key_model(
         storage
             .update_api_key_profile_config(
                 key_id,
-                &next_client,
-                &next_protocol,
-                &next_auth,
-                next_upstream_base_url,
-                next_static_headers_json,
-                normalized_service_tier
-                    .as_deref()
-                    .or(current.service_tier.as_deref()),
+                ApiKeyProfileConfig {
+                    client_type: &next_client,
+                    protocol_type: &next_protocol,
+                    auth_scheme: &next_auth,
+                    upstream_base_url: next_upstream_base_url,
+                    static_headers_json: next_static_headers_json,
+                    service_tier: normalized_service_tier
+                        .as_deref()
+                        .or(current.service_tier.as_deref()),
+                },
             )
             .map_err(|e| e.to_string())?;
     }

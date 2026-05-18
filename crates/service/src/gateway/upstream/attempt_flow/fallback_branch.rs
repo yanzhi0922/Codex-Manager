@@ -231,7 +231,9 @@ where
         return FallbackBranchResult::NotTriggered;
     }
 
-    let fallback_base = fallback_base.expect("fallback base already checked");
+    let Some(fallback_base) = fallback_base else {
+        return FallbackBranchResult::NotTriggered;
+    };
     if debug {
         log::warn!(
             "event=gateway_upstream_fallback path={} status={} account_id={} from={} to={}",

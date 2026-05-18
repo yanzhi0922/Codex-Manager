@@ -534,7 +534,7 @@ fn proxy_aggregate_request_with_policy(
                 let message = "aggregate api request timeout".to_string();
                 let request = request
                     .take()
-                    .expect("request should still be available for timeout response");
+                    .ok_or_else(|| "aggregate request missing for timeout response".to_string())?;
                 super::super::super::record_gateway_request_outcome(
                     path,
                     504,
@@ -592,7 +592,9 @@ fn proxy_aggregate_request_with_policy(
             for (url_idx, url) in attempt_urls.into_iter().enumerate() {
                 let builder = build_aggregate_api_request(
                     &client,
-                    request.as_ref().expect("request should still be available"),
+                    request.as_ref().ok_or_else(|| {
+                        "aggregate request missing before upstream build".to_string()
+                    })?,
                     method,
                     url.clone(),
                     body,
@@ -681,12 +683,12 @@ fn proxy_aggregate_request_with_policy(
 
                 let _aggregate_inflight_guard = aggregate_inflight_guard
                     .take()
-                    .expect("aggregate inflight guard should exist");
+                    .ok_or_else(|| "aggregate inflight guard missing before bridge".to_string())?;
                 let inflight_guard = super::super::super::acquire_account_inflight(key_id);
                 let bridge = super::super::super::respond_with_upstream(
                     request
                         .take()
-                        .expect("request should be available before bridge"),
+                        .ok_or_else(|| "aggregate request missing before bridge".to_string())?,
                     upstream,
                     inflight_guard,
                     response_adapter,
@@ -805,7 +807,7 @@ fn proxy_aggregate_request_with_policy(
     let exhausted = AggregateProxyExhausted {
         request: request
             .take()
-            .expect("request should still be available for failure response"),
+            .ok_or_else(|| "aggregate request missing for failure response".to_string())?,
         attempted_aggregate_api_ids,
         last_attempt_url,
         last_attempt_supplier_name,

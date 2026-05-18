@@ -1,10 +1,10 @@
 # ARCHITECTURE
 
-本文档说明 CodexManager 当前仓库结构、运行关系和发布链路，目标是帮助协作者快速判断改动应该落在哪一层。
+本文档说明 Codex-Copilot 当前仓库结构、运行关系和发布链路，目标是帮助协作者快速判断改动应该落在哪一层。
 
 ## 1. 总体形态
 
-CodexManager 由两类运行模式组成：
+Codex-Copilot 由两类运行模式组成。它由原 Codex-Manager 与 Codex Session Migrator 合并而来，用户可见产品名统一为 `Codex-Copilot`；内部二进制、环境变量和数据库文件暂保留 `codexmanager` 兼容命名，避免既有安装和脚本断裂。
 
 1. 桌面模式：Tauri 桌面端 + 本地 service 进程
 2. Service 模式：独立 service + web UI，可用于服务器、Docker 或无桌面环境
@@ -13,6 +13,7 @@ CodexManager 由两类运行模式组成：
 
 - 管理账号、用量、平台 Key
 - 提供本地网关能力
+- 管理 Codex Desktop 本地会话，支持扫描、诊断、Provider 迁移、导出与索引修复
 - 对外兼容 OpenAI 风格入口，并适配多种上游协议
 
 ## 2. 目录结构与职责
@@ -20,10 +21,10 @@ CodexManager 由两类运行模式组成：
 ```text
 .
 ├─ apps/                  # 前端与 Tauri 桌面端
-│  ├─ src/                # Vite + 原生 JavaScript 前端
+│  ├─ src/                # Next.js App Router + TypeScript 前端
 │  ├─ src-tauri/          # Tauri 桌面壳与原生命令桥接
 │  ├─ tests/              # 前端 UI/结构测试
-│  └─ dist/               # 前端构建产物
+│  └─ out/                # 前端静态导出产物（发布时）
 ├─ crates/
 │  ├─ core/               # 数据库迁移、存储基础、认证/用量底层能力
 │  ├─ service/            # 本地 HTTP/RPC 服务、网关、协议适配、设置持久化
@@ -39,10 +40,11 @@ CodexManager 由两类运行模式组成：
 
 ### 3.1 前端总控入口
 
-- `apps/src/main.js`：前端启动装配入口
-- `apps/src/runtime/app-bootstrap.js`：界面初始化编排
-- `apps/src/runtime/app-runtime.js`：刷新流程与运行期协同
-- `apps/src/settings/controller.js`：设置域门面，继续向子模块分发
+- `apps/src/app/layout.tsx`：Next.js 根布局与 providers 装配入口
+- `apps/src/app/page.tsx`：仪表盘首页入口
+- `apps/src/components/layout/app-bootstrap.tsx`：运行期启动编排与初始化
+- `apps/src/lib/api/transport.ts`：前端统一 RPC/IPC 传输层
+- `apps/src/hooks/`：页面级状态与业务编排（accounts/apikeys/settings 等）
 
 ### 3.2 桌面端壳层入口
 
@@ -67,7 +69,15 @@ CodexManager 由两类运行模式组成：
 ### 3.4 设置与运行配置入口
 
 - `crates/service/src/app_settings/`：设置持久化、环境变量覆盖、运行时同步
-- `crates/service/src/web_access.rs`：Web 访问密码与会话令牌
+- `crates/service/src/auth/web_access.rs`：Web 访问密码哈希与会话令牌
+
+### 3.5 会话管理入口
+
+- `apps/src/app/sessions/page.tsx`：会话管理页面，承载扫描、诊断、迁移、导出与索引修复操作
+- `apps/src/lib/api/session-client.ts`：前端会话 API client
+- `apps/src-tauri/src/commands/session.rs`：Tauri 会话命令桥接
+- `crates/service/src/session/`：Rust 原生会话域，包含 scanner、migrator、exporter、backup、repair
+- `crates/service/src/rpc_dispatch/session.rs`：会话 RPC 分发入口
 
 ## 4. 运行关系
 
@@ -274,7 +284,7 @@ Rust：
 
 为了减少结构污染，新增需求尽量按以下原则落点：
 
-- 新页面或前端交互：优先落在 `apps/src/views/`、`apps/src/services/`、`apps/src/ui/`
+- 新页面或前端交互：优先落在 `apps/src/app/`、`apps/src/components/`、`apps/src/hooks/`、`apps/src/lib/`
 - 新桌面能力：优先落在 `apps/src-tauri/src/` 的独立模块，而不是全部继续塞进 `lib.rs`
 - 新设置项：先判断属于环境变量、持久化配置还是运行时状态
 - 新协议兼容：优先落在 gateway / protocol adapter 子模块，不要把条件分支继续无序堆叠

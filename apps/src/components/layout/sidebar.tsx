@@ -1,14 +1,15 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Key, 
+import {
+  LayoutDashboard,
+  Users,
+  Key,
   Database,
-  FileText, 
-  Settings, 
-  ChevronLeft, 
+  FileText,
+  Settings,
+  FolderOpen,
+  ChevronLeft,
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { name: "账号管理", href: "/accounts/", icon: Users },
   { name: "聚合API", href: "/aggregate-api/", icon: Database },
   { name: "平台密钥", href: "/apikeys/", icon: Key },
+  { name: "会话管理", href: "/sessions/", icon: FolderOpen },
   { name: "请求日志", href: "/logs/", icon: FileText },
   { name: "设置", href: "/settings/", icon: Settings },
 ];
@@ -262,12 +264,12 @@ export function Sidebar() {
       <div className="flex h-16 items-center px-4 border-b shrink-0">
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <span className="text-sm font-bold">CM</span>
+            <span className="text-sm font-bold">CC</span>
           </div>
           {isSidebarOpen && (
             <div className="flex flex-col overflow-hidden animate-in fade-in duration-300">
-              <span className="text-sm font-bold truncate">CodexManager</span>
-              <span className="text-xs text-muted-foreground truncate opacity-70">账号池 · 用量管理</span>
+              <span className="text-sm font-bold truncate">Codex-Copilot</span>
+              <span className="text-xs text-muted-foreground truncate opacity-70">账号池 · 网关 · 会话管理</span>
             </div>
           )}
         </div>

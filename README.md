@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="assets/logo/logo.png" alt="CodexManager Logo" width="220" />
+  <img src="assets/logo/logo.png" alt="Codex-Copilot Logo" width="220" />
 </p>
 
-<h1 align="center">CodexManager</h1>
+<h1 align="center">Codex-Copilot</h1>
 
-<p align="center">本地桌面端 + 服务进程的 Codex 账号管理器+网关转发</p>
+<p align="center">Codex 账号池、网关转发与会话迁移的一体化本地工作台</p>
 
 <p align="center">
   <a href="README.en.md">English</a>|
@@ -12,8 +12,8 @@
   <a href="#赞助支持">赞助支持</a>
 </p>
 
-<p align="center"><strong>本地桌面端 + 服务进程的 Codex 账号池管理器</strong></p>
-<p align="center">统一管理账号、用量与平台 Key，并提供本地网关能力。</p>
+<p align="center"><strong>由 Codex-Manager 与 Codex Session Migrator 合并而来</strong></p>
+<p align="center">统一管理账号、用量、平台 Key、本地网关与 Codex Desktop 会话。</p>
 
 ## Star 曲线
 <p align="center">
@@ -47,6 +47,7 @@
 
 ## 最近变更
 - 当前最新版本：`v0.1.17`（2026-04-02）
+- 项目已合并为 `Codex-Copilot`：会话扫描、诊断、Provider 迁移、导出与 `session_index.jsonl` 修复能力已进入主应用，不再需要单独启动 `codex-session-migrator`。
 - GitHub Actions 发布链路已把 `pnpm/action-setup` 升到 `v5`、`docker/login-action` 升到 `v4`，现在直接使用官方 Node 24 运行时，不再依赖 Node 20 兼容强制开关。
 - GitHub Release 正文现在会优先从 `CHANGELOG.md` 自动提取当前版本段落，后续发版不再只有默认生成的 compare 链接。
 - 发布链路新增硬门：workflow 会先校验 workspace / 前端包 / Tauri 版本一致性，并拒绝 `tag` / `ref` 指向不同 commit 的组合，避免错误 commit 被挂到正式 tag 上。
@@ -80,6 +81,7 @@
 - 授权登录：浏览器授权 + 手动回调解析
 - 平台 Key：生成、禁用、删除、模型绑定、推理等级、服务等级（跟随请求 / Fast / Flex）
 - 聚合 API：管理第三方最小转发上游，支持创建、编辑、测试连通性、供应商名称、顺序优先级，以及按 Codex / Claude 分类展示
+- 会话管理：扫描 `~/.codex/sessions`，按 Provider / 工作区搜索，查看 prompt 预览，运行健康诊断，迁移 Provider，导出 Markdown / HTML / JSON / JSONL / CSV / TXT，并重建 `session_index.jsonl`
 - 本地服务：自动拉起、可自定义端口与监听地址
 - 本地网关：为 CLI 和第三方工具提供统一 OpenAI 兼容入口
 
@@ -107,6 +109,7 @@
 ## 页面展示
 ### 桌面端
 - 账号管理：集中导入、导出、刷新账号与用量，支持低配额 / 封禁筛选与重置时间展示
+- 会话管理：内置原 `codex-session-migrator` 的核心能力，支持迁移、导出、诊断和索引修复
 - 平台 Key：按模型、推理等级、服务等级绑定平台 Key，并查看调用日志
 - 设置页：统一管理端口、监听地址、代理、主题、自动更新、后台行为
 
@@ -172,7 +175,7 @@
 
 ## 赞助支持
 
-感谢每一位支持 CodexManager 的朋友。因为有你们的赞助与捐赠，项目才能持续迭代、稳定维护。
+感谢每一位支持 Codex-Copilot 的朋友。因为有你们的赞助与捐赠，项目才能持续迭代、稳定维护。
 
 特别感谢方木木、[Wonderdch](https://github.com/Wonderdch)、Catch_Bat 对项目的支持。
 
@@ -190,8 +193,8 @@
 - 公众号：七线牛马
 - 微信： ProsperGao
 
-- 交流群：答案是项目名：CodexManager
+- 交流群：答案是项目名：Codex-Copilot
 
   <img src="assets/images/qq_group.jpg" alt="交流群二维码" width="280" />
 
-- Telegram 群聊：[CodexManager TG 群](https://t.me/+OdpFa9GvjxhjMDhl)
+- Telegram 群聊：[Codex-Copilot TG 群](https://t.me/+OdpFa9GvjxhjMDhl)

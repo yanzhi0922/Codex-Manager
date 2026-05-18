@@ -47,12 +47,14 @@ export function Header() {
         return "平台密钥";
       case "/aggregate-api":
         return "聚合API";
+      case "/sessions":
+        return "会话管理";
       case "/logs":
         return "请求日志";
       case "/settings":
         return "应用设置";
       default:
-        return "CodexManager";
+        return "Codex-Copilot";
     }
   };
 

@@ -300,8 +300,13 @@ fn main() {
     let _ = codexmanager_service::initialize_storage_if_needed();
     codexmanager_service::sync_runtime_settings_from_storage();
 
-    let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
-    runtime.block_on(async_main());
+    match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime.block_on(async_main()),
+        Err(err) => {
+            eprintln!("create tokio runtime failed: {err}");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[cfg(test)]

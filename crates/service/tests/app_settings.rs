@@ -398,7 +398,7 @@ fn app_settings_set_persists_snapshot_and_password_hash() {
             .expect("read password hash");
         assert!(stored_password
             .as_deref()
-            .is_some_and(|value| value.starts_with("sha256$")));
+            .is_some_and(|value| value.starts_with("$argon2id$")));
     });
 }
 

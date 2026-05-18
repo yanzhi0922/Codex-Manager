@@ -13,6 +13,7 @@ mod lifecycle;
 mod requestlog;
 mod rpc_dispatch;
 mod runtime;
+mod session;
 mod startup_snapshot;
 mod storage;
 mod usage;

@@ -50,18 +50,69 @@ pub(super) fn parse_cookie_value(headers: &HeaderMap, cookie_name: &str) -> Opti
     })
 }
 
-fn set_cookie_header_value(value: &str) -> Option<HeaderValue> {
+fn set_cookie_header_value_with_secure(value: &str, secure: bool) -> Option<HeaderValue> {
+    let secure_attr = if secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
-        "{WEB_AUTH_COOKIE_NAME}={value}; Path=/; HttpOnly; SameSite=Lax"
+        "{WEB_AUTH_COOKIE_NAME}={value}; Path=/; HttpOnly; SameSite=Lax{secure_attr}"
     ))
     .ok()
 }
 
-fn clear_cookie_header_value() -> Option<HeaderValue> {
+fn clear_cookie_header_value_with_secure(secure: bool) -> Option<HeaderValue> {
+    let secure_attr = if secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
-        "{WEB_AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+        "{WEB_AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure_attr}"
     ))
     .ok()
+}
+
+fn constant_time_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (a, b) in left.iter().zip(right.iter()) {
+        diff |= a ^ b;
+    }
+    diff == 0
+}
+
+fn cookie_secure_from_headers(headers: &HeaderMap) -> bool {
+    let forwarded_proto_is_https = headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .any(|entry| entry.eq_ignore_ascii_case("https"))
+        })
+        .unwrap_or(false);
+    if forwarded_proto_is_https {
+        return true;
+    }
+
+    let forwarded_header_is_https = headers
+        .get("forwarded")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .to_ascii_lowercase()
+                .split(',')
+                .any(|entry| entry.contains("proto=https"))
+        })
+        .unwrap_or(false);
+    if forwarded_header_is_https {
+        return true;
+    }
+
+    headers
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .map(|origin| origin.starts_with("https://"))
+        .unwrap_or(false)
 }
 
 fn append_no_store_headers(response: &mut Response) {
@@ -98,7 +149,7 @@ fn request_is_authenticated(headers: &HeaderMap, state: &AppState) -> bool {
         &state.rpc_token,
         &state.web_auth_session_key,
     );
-    cookie_value == expected
+    constant_time_eq(&cookie_value, &expected)
 }
 
 fn builtin_login_html(error: Option<&str>) -> String {
@@ -111,7 +162,7 @@ fn builtin_login_html(error: Option<&str>) -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 登录</title>
+    <title>Codex-Copilot Web 登录</title>
     <style>
       :root {{
         color-scheme: light;
@@ -208,7 +259,7 @@ fn builtin_login_html(error: Option<&str>) -> String {
     <form class="card" method="post" action="/__login">
       <div class="mark">CM</div>
       <h1>访问受保护</h1>
-      <p>当前 CodexManager Web 已启用访问密码，请先验证后再进入管理页面。</p>
+      <p>当前 Codex-Copilot Web 已启用访问密码，请先验证后再进入管理页面。</p>
       {error_html}
       <label for="password">访问密码</label>
       <input id="password" name="password" type="password" autocomplete="current-password" autofocus />
@@ -228,7 +279,7 @@ fn login_success_html() -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 登录</title>
+    <title>Codex-Copilot Web 登录</title>
   </head>
   <body>
     <script>
@@ -250,7 +301,7 @@ fn logout_success_html() -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 已退出</title>
+    <title>Codex-Copilot Web 已退出</title>
   </head>
   <body>
     <script>
@@ -305,6 +356,7 @@ pub(super) async fn login_page(
 
 pub(super) async fn login_submit(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     axum::Form(form): axum::Form<LoginForm>,
 ) -> impl IntoResponse {
     let Some(password_hash) = current_web_access_password_hash() else {
@@ -324,8 +376,9 @@ pub(super) async fn login_submit(
         &state.rpc_token,
         &state.web_auth_session_key,
     );
+    let secure_cookie = cookie_secure_from_headers(&headers);
     let mut response = Html(login_success_html()).into_response();
-    if let Some(header_value) = set_cookie_header_value(&token) {
+    if let Some(header_value) = set_cookie_header_value_with_secure(&token, secure_cookie) {
         response
             .headers_mut()
             .append(header::SET_COOKIE, header_value);
@@ -334,9 +387,10 @@ pub(super) async fn login_submit(
     response
 }
 
-pub(super) async fn logout() -> impl IntoResponse {
+pub(super) async fn logout(headers: HeaderMap) -> impl IntoResponse {
+    let secure_cookie = cookie_secure_from_headers(&headers);
     let mut response = Html(logout_success_html()).into_response();
-    if let Some(header_value) = clear_cookie_header_value() {
+    if let Some(header_value) = clear_cookie_header_value_with_secure(secure_cookie) {
         response
             .headers_mut()
             .append(header::SET_COOKIE, header_value);
@@ -381,5 +435,32 @@ mod tests {
         assert!(html.contains("sessionStorage.setItem"));
         assert!(html.contains(WEB_AUTH_TAB_SESSION_STORAGE_KEY));
         assert!(html.contains("location.replace(\"/\")"));
+    }
+
+    #[test]
+    fn cookie_secure_from_headers_detects_https_forwarded_proto() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+        assert!(cookie_secure_from_headers(&headers));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "forwarded",
+            HeaderValue::from_static("for=1.2.3.4;proto=https"),
+        );
+        assert!(cookie_secure_from_headers(&headers));
+    }
+
+    #[test]
+    fn set_cookie_header_value_respects_secure_flag() {
+        let secure =
+            set_cookie_header_value_with_secure("token", true).expect("secure cookie header");
+        let insecure =
+            set_cookie_header_value_with_secure("token", false).expect("insecure cookie header");
+
+        let secure_text = secure.to_str().expect("header str");
+        let insecure_text = insecure.to_str().expect("header str");
+        assert!(secure_text.contains("; Secure"));
+        assert!(!insecure_text.contains("; Secure"));
     }
 }

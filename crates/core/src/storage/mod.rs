@@ -190,6 +190,16 @@ pub struct ApiKey {
     pub last_used_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ApiKeyProfileConfig<'a> {
+    pub client_type: &'a str,
+    pub protocol_type: &'a str,
+    pub auth_scheme: &'a str,
+    pub upstream_base_url: Option<&'a str>,
+    pub static_headers_json: Option<&'a str>,
+    pub service_tier: Option<&'a str>,
+}
+
 #[derive(Debug, Clone)]
 pub struct AggregateApi {
     pub id: String,

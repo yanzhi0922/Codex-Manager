@@ -80,7 +80,18 @@ macro_rules! invoke_handler {
             crate::commands::updater::app_update_apply_portable,
             crate::commands::updater::app_update_launch_installer,
             crate::commands::updater::app_update_status,
-            crate::commands::updater::app_update_open_logs_dir
+            crate::commands::updater::app_update_open_logs_dir,
+            // session
+            crate::commands::session::service_session_scan,
+            crate::commands::session::service_session_overview,
+            crate::commands::session::service_session_detail,
+            crate::commands::session::service_session_dashboard,
+            crate::commands::session::service_session_doctor,
+            crate::commands::session::service_session_migrate_preview,
+            crate::commands::session::service_session_migrate,
+            crate::commands::session::service_session_export,
+            crate::commands::session::service_session_repair,
+            crate::commands::session::service_session_backups
         ]
     };
 }

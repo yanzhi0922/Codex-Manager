@@ -662,7 +662,15 @@ fn request_logs_compact_migration_drops_legacy_usage_columns_and_preserves_rows(
     );
     assert_eq!(request_log_row.3, None);
 
-    let token_row: (Option<i64>, Option<i64>, Option<f64>, Option<i64>, Option<i64>) = storage
+    struct TokenStatsRow {
+        input_tokens: Option<i64>,
+        output_tokens: Option<i64>,
+        estimated_cost_usd: Option<f64>,
+        cached_input_tokens: Option<i64>,
+        reasoning_output_tokens: Option<i64>,
+    }
+
+    let token_row = storage
         .conn
         .query_row(
             "SELECT input_tokens, output_tokens, estimated_cost_usd, cached_input_tokens, reasoning_output_tokens
@@ -670,19 +678,19 @@ fn request_logs_compact_migration_drops_legacy_usage_columns_and_preserves_rows(
              WHERE request_log_id = 7",
             [],
             |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                ))
+                Ok(TokenStatsRow {
+                    input_tokens: row.get(0)?,
+                    output_tokens: row.get(1)?,
+                    estimated_cost_usd: row.get(2)?,
+                    cached_input_tokens: row.get(3)?,
+                    reasoning_output_tokens: row.get(4)?,
+                })
             },
         )
         .expect("load migrated token stats");
-    assert_eq!(token_row.0, Some(12));
-    assert_eq!(token_row.1, Some(5));
-    assert_eq!(token_row.2, Some(0.25));
-    assert_eq!(token_row.3, Some(3));
-    assert_eq!(token_row.4, Some(2));
+    assert_eq!(token_row.input_tokens, Some(12));
+    assert_eq!(token_row.output_tokens, Some(5));
+    assert_eq!(token_row.estimated_cost_usd, Some(0.25));
+    assert_eq!(token_row.cached_input_tokens, Some(3));
+    assert_eq!(token_row.reasoning_output_tokens, Some(2));
 }

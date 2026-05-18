@@ -313,3 +313,180 @@ export interface StartupSnapshot {
   requestLogTodaySummary: RequestLogTodaySummary;
   requestLogs: RequestLog[];
 }
+
+// ── Session management types ──────────────────────────────────────
+
+export interface SessionProviderSummary {
+  name: string;
+  count: number;
+}
+
+export interface SessionListItem {
+  id: string;
+  filePath: string;
+  relativePath: string;
+  provider: string;
+  source: string;
+  timestamp: string | null;
+  timestampDisplay: string;
+  cwd: string | null;
+  originator: string | null;
+  cliVersion: string | null;
+  preview: string | null;
+  recentPrompts: string[];
+  size: number;
+  sizeDisplay: string;
+  archived: boolean;
+}
+
+export interface SessionListResult {
+  items: SessionListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sessionsDir: string;
+  providers: SessionProviderSummary[];
+  totals: { all: number; filtered: number };
+}
+
+export interface SessionOverviewResult {
+  sessionsDir: string;
+  totals: { sessions: number; providers: number; backups: number; bytes: number; bytesDisplay: string };
+  providers: SessionProviderSummary[];
+  latestSessionAt: string | null;
+  latestSessionAtDisplay: string;
+}
+
+export interface SessionDashboardResult {
+  overview: SessionOverviewResult;
+  sessions: SessionListResult;
+}
+
+export interface SessionDetailResult {
+  id: string;
+  filePath: string;
+  relativePath: string;
+  provider: string;
+  source: string;
+  timestamp: string | null;
+  timestampDisplay: string;
+  cwd: string | null;
+  originator: string | null;
+  cliVersion: string | null;
+  size: number;
+  sizeDisplay: string;
+  preview: string | null;
+  recentPrompts: string[];
+  latestCwd: string | null;
+  latestModel: string | null;
+  archived: boolean;
+}
+
+export interface SessionDoctorIssue {
+  severity: string;
+  issueType: string;
+  relativePath: string | null;
+  message: string;
+}
+
+export interface SessionDoctorSummary {
+  totalFiles: number;
+  invalidMetaCount: number;
+  missingProviderCount: number;
+  missingWorkspaceCount: number;
+  workspaceReadyCount: number;
+  duplicateIdCount: number;
+}
+
+export interface SessionDoctorResult {
+  ok: boolean;
+  sessionsDir: string;
+  summary: SessionDoctorSummary;
+  issues: SessionDoctorIssue[];
+}
+
+export interface SessionMigrationPreviewItem {
+  id: string;
+  filePath: string;
+  relativePath: string;
+  timestamp: string | null;
+  timestampDisplay: string;
+  cwd: string | null;
+  preview: string | null;
+  from: string;
+  fromSource: string;
+  to: string;
+  toSource: string;
+  skipped: boolean;
+}
+
+export interface SessionMigrationPreviewResult {
+  sessionsDir: string;
+  targetProvider: string;
+  targetSource: string;
+  totalSelected: number;
+  actionable: number;
+  skipped: number;
+  items: SessionMigrationPreviewItem[];
+}
+
+export interface SessionActionError {
+  filePath: string;
+  message: string;
+}
+
+export interface SessionMigrationResult {
+  ok: boolean;
+  dryRun: boolean;
+  sessionsDir: string;
+  targetProvider: string;
+  targetSource: string;
+  backupId: string | null;
+  backupDir: string | null;
+  totalSelected: number;
+  migrated: number;
+  skipped: number;
+  errors: SessionActionError[];
+  items: SessionMigrationPreviewItem[];
+}
+
+export interface SessionExportResult {
+  ok: boolean;
+  sessionsDir: string;
+  format: string;
+  fileName: string;
+  filePath: string;
+  mimeType: string;
+  content: string;
+  sessionCount: number;
+  exportedAt: string;
+}
+
+export interface SessionRepairResult {
+  ok: boolean;
+  sessionsDir: string;
+  sessionIndexPath: string;
+  sessionIndexBackupPath: string | null;
+  totalSessions: number;
+  writtenEntries: number;
+  stateDatabaseCount: number;
+  threadsInserted: number;
+  threadsUpdated: number;
+  issues: SessionDoctorIssue[];
+}
+
+export interface SessionBackupSummary {
+  backupId: string;
+  backupDir: string;
+  createdAt: string;
+  label: string;
+  reason: string | null;
+  sourceProvider: string | null;
+  targetProvider: string | null;
+  entryCount: number;
+}
+
+export interface SessionBackupListResult {
+  sessionsDir: string;
+  backups: SessionBackupSummary[];
+}
