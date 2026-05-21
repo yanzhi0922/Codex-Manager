@@ -238,7 +238,7 @@ jobs:
           bundle_root="${release_dir}/bundle"
           test -d "$bundle_root" || { echo "macOS bundle root not found: $bundle_root"; exit 1; }
 
-          bundle_dir="$(find "$bundle_root" -type d -path '*/CodexManager.app' | head -n 1)"
+          bundle_dir="$(find "$bundle_root" -type d \( -name 'Codex-Copilot.app' -o -name 'CodexManager.app' \) | head -n 1)"
           test -n "$bundle_dir" || { echo "macOS app bundle not found under: $bundle_root"; exit 1; }
 
           dmg_dir="${bundle_root}/dmg"
@@ -294,7 +294,7 @@ jobs:
           bundle_root="${release_dir}/bundle"
           test -d "$bundle_root" || { echo "macOS bundle root not found: $bundle_root"; exit 1; }
 
-          bundle_dir="$(find "$bundle_root" -type d -path '*/CodexManager.app' | head -n 1)"
+          bundle_dir="$(find "$bundle_root" -type d \( -name 'Codex-Copilot.app' -o -name 'CodexManager.app' \) | head -n 1)"
           test -n "$bundle_dir" || { echo "macOS app bundle not found under: $bundle_root"; exit 1; }
 
           portable_dir="${release_dir}/portable"
