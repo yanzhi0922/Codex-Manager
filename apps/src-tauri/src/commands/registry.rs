@@ -81,6 +81,8 @@ macro_rules! invoke_handler {
             crate::commands::updater::app_update_launch_installer,
             crate::commands::updater::app_update_status,
             crate::commands::updater::app_update_open_logs_dir,
+            // platforms
+            crate::commands::platforms::service_platforms_discovery,
             // session
             crate::commands::session::service_session_scan,
             crate::commands::session::service_session_overview,

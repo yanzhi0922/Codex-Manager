@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-05-21
+
+### Added
+- 新增“能力驾驶舱”：把账号池、网关、Codex 会话、平台 Key、多实例工作区和跨工具平台矩阵汇总到同一张产品地图中。
+- 新增 `platforms/discovery` 只读 RPC，探测 Codex、VS Code / GitHub Copilot、Cursor、Windsurf、Kiro、Gemini CLI、Zed 等本地数据目录，并明确不写入第三方客户端状态。
+- 新增 cockpit-tools 借鉴边界文档，记录许可证限制、产品对照、已实施范围和后续路线。
+
+### Changed
+- README / README.en / docs 首页补充能力驾驶舱说明，并将当前发布版本提升到 `0.1.18`。
+- Codex-Copilot 的产品表达从“账号池 + 会话工具”进一步收口为统一的账号、网关、会话、平台与实例管理工作台。
+
 ## [0.1.17] - 2026-04-02
 
 ### Fixed
@@ -189,7 +200,8 @@
 ### Changed
 - 账号管理页操作区整合为单一“账号操作”下拉菜单，替代右侧多按钮堆叠，界面更简洁。
 
-[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/yanzhi0922/Codex-Manager/compare/v0.1.18...HEAD
+[0.1.18]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.18
 [0.1.17]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.17
 [0.1.16]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.16
 [0.1.15]: https://github.com/yanzhi0922/Codex-Manager/releases/tag/v0.1.15

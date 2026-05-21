@@ -21,6 +21,30 @@ export interface ServiceStatus {
   addr: string;
 }
 
+export interface PlatformDiscoveryTotals {
+  ready: number;
+  detected: number;
+  missing: number;
+  planned: number;
+}
+
+export interface PlatformDiscoveryItem {
+  id: string;
+  name: string;
+  category: string;
+  status: string;
+  primaryPath: string | null;
+  detectedPaths: string[];
+  signals: string[];
+  notes: string[];
+}
+
+export interface PlatformDiscoveryResult {
+  generatedAt: number;
+  totals: PlatformDiscoveryTotals;
+  items: PlatformDiscoveryItem[];
+}
+
 export interface AccountUsage {
   accountId: string;
   availabilityStatus: string;

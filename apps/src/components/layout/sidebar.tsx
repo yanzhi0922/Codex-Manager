@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Compass,
   LayoutDashboard,
   Users,
   Key,
@@ -29,6 +30,7 @@ import {
 
 const NAV_ITEMS = [
   { name: "仪表盘", href: "/", icon: LayoutDashboard },
+  { name: "能力驾驶舱", href: "/cockpit/", icon: Compass },
   { name: "账号管理", href: "/accounts/", icon: Users },
   { name: "聚合API", href: "/aggregate-api/", icon: Database },
   { name: "平台密钥", href: "/apikeys/", icon: Key },
@@ -64,7 +66,9 @@ const NavItem = memo(({
     )}
   >
     <item.icon className="h-4 w-4 shrink-0" />
-    {isSidebarOpen && <span className="text-sm truncate">{item.name}</span>}
+    {isSidebarOpen && (
+      <span className="hidden truncate text-sm md:inline">{item.name}</span>
+    )}
   </a>
 ));
 
@@ -258,7 +262,7 @@ export function Sidebar() {
     <div
       className={cn(
         "relative z-20 flex shrink-0 flex-col glass-sidebar transition-[width] duration-300 ease-in-out",
-        isSidebarOpen ? "w-64" : "w-16"
+        isSidebarOpen ? "w-16 md:w-64" : "w-16"
       )}
     >
       <div className="flex h-16 items-center px-4 border-b shrink-0">
@@ -267,7 +271,7 @@ export function Sidebar() {
             <span className="text-sm font-bold">CC</span>
           </div>
           {isSidebarOpen && (
-            <div className="flex flex-col overflow-hidden animate-in fade-in duration-300">
+            <div className="hidden flex-col overflow-hidden animate-in fade-in duration-300 md:flex">
               <span className="text-sm font-bold truncate">Codex-Copilot</span>
               <span className="text-xs text-muted-foreground truncate opacity-70">账号池 · 网关 · 会话管理</span>
             </div>
@@ -291,7 +295,7 @@ export function Sidebar() {
           {isSidebarOpen ? (
             <>
               <ChevronLeft className="h-4 w-4 shrink-0" />
-              <span className="text-sm">收起侧边栏</span>
+              <span className="hidden text-sm md:inline">收起侧边栏</span>
             </>
           ) : (
             <ChevronRight className="h-4 w-4 shrink-0" />

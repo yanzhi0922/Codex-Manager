@@ -37,9 +37,11 @@ const PRIMARY_PAGE_ROUTES = [
   "/accounts/",
   "/aggregate-api/",
   "/apikeys/",
+  "/cockpit/",
   "/logs/",
   "/settings/",
 ] as const;
+const STATIC_FALLBACK_ROUTES = ["/cockpit"] as const;
 const DEV_ROUTE_WARMUP_TIMEOUT_MS = 12_000;
 const STARTUP_WARMUP_LABEL = "[startup warmup]";
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -66,6 +68,12 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
   const runtimeCapabilitiesRef = useRef(runtimeCapabilities);
   const [error, setError] = useState<string | null>(null);
   const supportsLocalServiceStart = canManageService;
+  const normalizedPathname = normalizeRoutePath(pathname);
+  const canRenderStaticFallback =
+    isUnsupportedWebRuntime &&
+    STATIC_FALLBACK_ROUTES.includes(
+      normalizedPathname as (typeof STATIC_FALLBACK_ROUTES)[number],
+    );
 
   useEffect(() => {
     serviceStatusRef.current = serviceStatus;
@@ -512,7 +520,8 @@ export function AppBootstrap({ children }: { children: React.ReactNode }) {
   }, [isDesktopRuntime, pathname]);
 
   const showLoading = isInitializing && !hasInitializedOnce.current;
-  const showError = !!error && !hasInitializedOnce.current;
+  const showError =
+    !!error && !hasInitializedOnce.current && !canRenderStaticFallback;
   return (
     <>
       {/* Always keep children mounted to prevent Header/Sidebar remounting 'reload' feel */}

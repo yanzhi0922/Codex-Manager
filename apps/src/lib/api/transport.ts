@@ -135,6 +135,7 @@ const WEB_COMMAND_MAP: Record<string, WebCommandDescriptor> = {
   service_requestlog_summary: { rpcMethod: "requestlog/summary" },
   service_requestlog_clear: { rpcMethod: "requestlog/clear" },
   service_requestlog_today_summary: { rpcMethod: "requestlog/today_summary" },
+  service_platforms_discovery: { rpcMethod: "platforms/discovery" },
   service_session_scan: { rpcMethod: "session/scan" },
   service_session_overview: { rpcMethod: "session/overview" },
   service_session_detail: { rpcMethod: "session/detail" },

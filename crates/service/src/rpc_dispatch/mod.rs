@@ -10,6 +10,7 @@ mod aggregate_api;
 mod apikey;
 mod app_settings;
 mod gateway;
+mod platforms;
 mod requestlog;
 mod service_config;
 mod session;
@@ -108,6 +109,9 @@ pub(crate) fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         return resp;
     }
     if let Some(resp) = gateway::try_handle(&req) {
+        return resp;
+    }
+    if let Some(resp) = platforms::try_handle(&req) {
         return resp;
     }
     if let Some(resp) = requestlog::try_handle(&req) {

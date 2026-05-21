@@ -21,6 +21,41 @@ pub struct InitializeResult {
     pub user_agent: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformDiscoveryTotals {
+    pub ready: i64,
+    pub detected: i64,
+    pub missing: i64,
+    pub planned: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformDiscoveryItem {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub status: String,
+    #[serde(default)]
+    pub primary_path: Option<String>,
+    #[serde(default)]
+    pub detected_paths: Vec<String>,
+    #[serde(default)]
+    pub signals: Vec<String>,
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformDiscoveryResult {
+    #[serde(rename = "generatedAt")]
+    pub generated_at: i64,
+    pub totals: PlatformDiscoveryTotals,
+    pub items: Vec<PlatformDiscoveryItem>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountSummary {

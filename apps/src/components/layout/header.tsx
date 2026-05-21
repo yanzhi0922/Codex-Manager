@@ -41,6 +41,8 @@ export function Header() {
     switch (normalizedPathname) {
       case "/":
         return "仪表盘";
+      case "/cockpit":
+        return "能力驾驶舱";
       case "/accounts":
         return "账号管理";
       case "/apikeys":
@@ -105,9 +107,9 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-4 glass-header px-6">
-        <div className="flex min-w-0 shrink-0 items-center gap-4">
-          <h1 className="text-lg font-semibold">{getPageTitle()}</h1>
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-2 glass-header px-3 md:gap-4 md:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <h1 className="truncate text-base font-semibold md:text-lg">{getPageTitle()}</h1>
           <Badge variant={serviceStatus.connected ? "default" : "secondary"} className="h-5">
             {serviceStatus.connected ? "服务已连接" : "服务未连接"}
           </Badge>
@@ -150,11 +152,11 @@ export function Header() {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-2 px-3"
+            className="h-9 gap-2 px-2 md:px-3"
             onClick={() => setWebPasswordModalOpen(true)}
           >
             <SettingsIcon className="h-3.5 w-3.5" />
-            <span className="text-xs">密码</span>
+            <span className="hidden text-xs sm:inline">密码</span>
           </Button>
         </div>
       </header>

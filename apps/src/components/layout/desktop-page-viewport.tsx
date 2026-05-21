@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ROOT_PAGE_PATHS, type RootPagePath } from "@/lib/routes/root-page-paths";
 import { normalizeRoutePath } from "@/lib/utils/static-routes";
 import DashboardPage from "@/app/page";
+import CockpitPage from "@/app/cockpit/page";
 import AccountsPage from "@/app/accounts/page";
 import AggregateApiPage from "@/app/aggregate-api/page";
 import ApiKeysPage from "@/app/apikeys/page";
@@ -16,6 +17,7 @@ import SettingsPage from "@/app/settings/page";
 
 const PAGE_COMPONENTS: Record<RootPagePath, ComponentType> = {
   "/": DashboardPage,
+  "/cockpit": CockpitPage,
   "/accounts": AccountsPage,
   "/aggregate-api": AggregateApiPage,
   "/apikeys": ApiKeysPage,

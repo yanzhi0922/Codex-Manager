@@ -10,6 +10,7 @@ mod errors;
 mod gateway;
 mod http;
 mod lifecycle;
+mod platforms;
 mod requestlog;
 mod rpc_dispatch;
 mod runtime;
