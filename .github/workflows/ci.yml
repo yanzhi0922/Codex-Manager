@@ -23,6 +23,8 @@ jobs:
 
       - name: Setup release environment
         uses: ./.github/actions/setup-release-env
+        with:
+          enable-rust-cache: "false"
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
